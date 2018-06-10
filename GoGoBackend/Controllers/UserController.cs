@@ -28,7 +28,7 @@ namespace GoGoBackend.Controllers
         public async Task Get()
         {
 			// await SqlPipe.Stream("select * from Todo FOR JSON PATH", Response.Body, "[]"); (obsolete??)
-			await SqlPipe.Sql("select * from [dbo].[Table] FOR JSON PATH").Stream(Response.Body, "['No Results']"); // correct new version
+			await SqlPipe.Sql("select * from [dbo].[Table] FOR JSON PATH").Stream(Response.Body, "['No Results Found']"); // correct new version
 		}
 
 		// GET: api/User/5
