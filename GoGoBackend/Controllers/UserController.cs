@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Belgrade.SqlClient;
 using System.Data.SqlClient;
 using System.IO;
+using System.Security.Cryptography;
 
 namespace GoGoBackend.Controllers
 {
@@ -27,7 +28,6 @@ namespace GoGoBackend.Controllers
 		[HttpGet]
         public async Task Get()
         {
-			// await SqlPipe.Stream("select * from Todo FOR JSON PATH", Response.Body, "[]"); (obsolete??)
 			await SqlPipe.Sql("select * from [dbo].[Table] FOR JSON PATH").Stream(Response.Body, "['No Results Found']"); // correct new version
 		}
 
@@ -41,7 +41,7 @@ namespace GoGoBackend.Controllers
 			await SqlPipe.Sql(cmd).Stream(Response.Body, "{}");
 		}
 
-		// POST: api/User
+		// POST: api/
 		[HttpPost]
 		public async Task Post()
 		{
@@ -56,7 +56,30 @@ namespace GoGoBackend.Controllers
 			await SqlCommand.Sql(cmd).Exec();
 		}
 
-		// PUT: api/User/5
+		// POST: api/User/username
+		// this is a request for a password validation
+		[HttpPost("{id}")]
+		public async Task Validate(string id)
+		{
+			string password = Request.Form["Password"];
+			// hash the provided password
+			string passwordHash;
+			using (MD5 md5Hash = MD5.Create())
+			{
+				passwordHash = md5Hash.ComputeHash(password.Select(c => (byte)c).ToArray()).ToString();
+			}
+
+			// get the record for the specified username
+			var cmd = new SqlCommand("select * from [dbo].[Table] where Name = @id AND PasswordHash = @password");
+			cmd.Parameters.AddWithValue("id", id);
+			cmd.Parameters.AddWithValue("password", passwordHash);
+			// will return a row if value, nothing if not
+			await SqlCommand.Sql(cmd).Exec();
+
+		}
+
+
+		// PUT: api/User/username
 		[HttpPut("{id}")]
 		public async Task Put(string id)
 		{
@@ -76,10 +99,12 @@ namespace GoGoBackend.Controllers
 			await SqlCommand.Sql(cmd).Exec();
 		}
 
-		// DELETE: api/ApiWithActions/5
+		// DELETE: api/User/username
 		[HttpDelete("{id}")]
-        public void Delete(int id)
+        public void Delete(string id)
         {
+			var cmd = new SqlCommand("delete [dbo].[Table] where Name = @id");
+			cmd.Parameters.AddWithValue("id", id);
         }
 	}
 }
