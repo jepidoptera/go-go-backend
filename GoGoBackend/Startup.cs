@@ -16,7 +16,9 @@ namespace GoGoBackend
 {
     public class Startup
     {
-        public Startup(IConfiguration configuration)
+		public const string ConnString = "Server=gogobackend.database.windows.net;Database=user_registry;User Id=Jepidoptera;Password=Gogopopterix-Billy";
+
+		public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
         }
@@ -27,7 +29,6 @@ namespace GoGoBackend
 		public void ConfigureServices(IServiceCollection services)
 		{
 
-			const string ConnString = "Server=gogobackend.database.windows.net;Database=user_registry;User Id=Jepidoptera;Password=Gogopopterix-Billy";
 
 			services.AddTransient<IQueryPipe>(_ => new QueryPipe(new SqlConnection(ConnString)));
 			services.AddTransient<ICommand>(_ => new Command(new SqlConnection(ConnString)));

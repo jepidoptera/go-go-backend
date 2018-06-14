@@ -45,37 +45,87 @@ namespace GoGoBackend.Controllers
 		[HttpPost]
 		public async Task Post()
 		{
-			string newUser = new StreamReader(Request.Body).ReadToEnd();
-			var cmd = new SqlCommand(
-				@"insert into [dbo].[Table]
-				select *
-				from OPENJSON(@newUser)
-				WITH( Name varchar(50), PasswordHash binary(32) )");
-			cmd.Parameters.AddWithValue("newUser", newUser);
-			// await SqlCommand.Exec(cmd);
-			await SqlCommand.Sql(cmd).Exec();
-		}
+			string password = Request.Form["password"];
+			string username = Request.Form["username"];
+			byte[] passwordHash;
 
-		// POST: api/User/username
-		// this is a request for a password validation
-		[HttpPost("{id}")]
-		public async Task Validate(string id)
-		{
-			string password = Request.Form["Password"];
-			// hash the provided password
-			string passwordHash;
 			using (MD5 md5Hash = MD5.Create())
 			{
-				passwordHash = md5Hash.ComputeHash(password.Select(c => (byte)c).ToArray()).ToString();
+				// salt it with the username
+				passwordHash = md5Hash.ComputeHash((username + password).Select(c => (byte)c).ToArray());
 			}
 
-			// get the record for the specified username
-			var cmd = new SqlCommand("select * from [dbo].[Table] where Name = @id AND PasswordHash = @password");
-			cmd.Parameters.AddWithValue("id", id);
-			cmd.Parameters.AddWithValue("password", passwordHash);
-			// will return a row if value, nothing if not
-			await SqlCommand.Sql(cmd).Exec();
+			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			{
+				connection.Open();
+				string sql = "INSERT INTO [dbo].[table] (Username,PasswordHash) VALUES(@username,@passwordHash)";
+				SqlCommand cmd = new SqlCommand(sql, connection);
+				cmd.Parameters.AddWithValue("@username", username);
+				cmd.Parameters.AddWithValue("@passwordHash", passwordHash);
+				cmd.ExecuteNonQuery();
+			}
+			//	string newUser = new StreamReader(Request.Body).ReadToEnd();
+		//	var cmd = new SqlCommand(
+		//		@"insert into [dbo].[Table]
+		//		select *
+		//		from OPENJSON(@newUser)
+		//		WITH( Name varchar(50), PasswordHash binary(32) )");
+		//	cmd.Parameters.AddWithValue("newUser", newUser);
+		//	// await SqlCommand.Exec(cmd);
+		//	await SqlCommand.Sql(cmd).Exec();
+		}
 
+			// POST: api/User/username
+			// this is a request for a password validation
+		[HttpPost("{username}")]
+		public string Validate(string username)
+		{
+			string password = Request.Form["password"];
+			// hash the provided password
+			byte[] passwordHash;
+			using (MD5 md5Hash = MD5.Create())
+			{
+				// get password hash salted with username
+				passwordHash = md5Hash.ComputeHash((username + password).Select(c => (byte)c).ToArray());
+			}
+
+			// check the password hash for the specified username
+			byte[] passcheck = new byte[16];
+			bool foundUser = false;
+			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			{
+				var cmd = new SqlCommand("select PasswordHash from [dbo].[Table] where Username = @id", connection);
+				cmd.Parameters.AddWithValue("@id", username);
+				connection.Open();
+				// cmd.Parameters.AddWithValue("password", passwordHash);
+				// will return a row if value, nothing if not
+				// string x = await SqlCommand.GetString(cmd);
+				SqlDataReader reader = cmd.ExecuteReader();
+				try
+				{
+					while (reader.Read())
+					{
+						passcheck = (byte[])reader["PasswordHash"];
+						foundUser = true;
+					}
+				}
+				finally
+				{
+					// Always call Close when done reading.
+					reader.Close();
+				}
+			}
+			// is the password valid??
+			// supposedly this comparison method is quite slow, but I don't think I care
+			if (passwordHash.SequenceEqual(passcheck))
+			{
+				return "success";
+			}
+			else if (!foundUser)
+			{
+				return "user not found";
+			}
+			return "wrong password";
 		}
 
 
@@ -101,11 +151,12 @@ namespace GoGoBackend.Controllers
 
 		// DELETE: api/User/username
 		[HttpDelete("{id}")]
-        public void Delete(string id)
+        public async Task Delete(string id)
         {
-			var cmd = new SqlCommand("delete [dbo].[Table] where Name = @id");
+			var cmd = new SqlCommand("delete [dbo].[Table] where Username = @id");
 			cmd.Parameters.AddWithValue("id", id);
-        }
+			await SqlCommand.Sql(cmd).Exec();
+		}
 	}
 }
 
