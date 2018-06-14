@@ -6,9 +6,13 @@ using System.Threading;
 using System.ComponentModel;
 namespace Emails
 {
-	public class SimpleAsynchronousExample
+	public class Server
 	{
 		static bool mailSent = false;
+		const string smtpServer = "Smtp.gmail.com";
+		const string smtpAddress = "gogobackend@gmail.com";
+		const string smtpPassword = "cat!!a3%malomor10tta761,,";
+
 		private static void SendCompletedCallback(object sender, AsyncCompletedEventArgs e)
 		{
 			// Get the unique identifier for this asynchronous operation.
@@ -28,10 +32,13 @@ namespace Emails
 			}
 			mailSent = true;
 		}
-		public static void SendValidationMail(string recipient, string validationString, string[] args)
+		public static void SendValidationMail(string recipient, string validationString)
 		{
-			// Command line argument must the the SMTP host.
-			SmtpClient client = new SmtpClient(args[0]);
+			// set up the SMTP host.
+			SmtpClient client = new SmtpClient(smtpServer);
+			// log in
+			client.Credentials = new NetworkCredential(smtpAddress, smtpPassword);
+
 			// Specify the e-mail sender.
 			// Create a mailing address that includes a UTF8 character
 			// in the display name.
@@ -44,12 +51,12 @@ namespace Emails
 			
 			// Specify the message content.
 			MailMessage message = new MailMessage(from, to);
-			message.Body = "This is a test e-mail message sent by an application. ";
+			message.Body = string.Format("Please click the following link to complete your registration: \n {0}", validationString);
 			// Include some non-ASCII characters in body and subject.
 			string someArrows = new string(new char[] { '\u2190', '\u2191', '\u2192', '\u2193' });
 			message.Body += Environment.NewLine + someArrows;
 			message.BodyEncoding = System.Text.Encoding.UTF8;
-			message.Subject = "email validiation" + someArrows;
+			message.Subject = "email validiation";
 			message.SubjectEncoding = System.Text.Encoding.UTF8;
 			// Set the method that is called back when the send operation ends.
 			client.SendCompleted += new
@@ -59,20 +66,11 @@ namespace Emails
 			// For this example, the userToken is a string constant.
 			string userState = "test message1";
 			client.SendAsync(message, userState);
-			Console.WriteLine("Sending message... press c to cancel mail. Press any other key to exit.");
-			string answer = Console.ReadLine();
-			// If the user canceled the send, and mail hasn't been sent yet,
-			// then cancel the pending operation.
-			if (answer.StartsWith("c") && mailSent == false)
-			{
-				client.SendAsyncCancel();
-			}
 			// Clean up.
 			message.Dispose();
-			Console.WriteLine("Goodbye.");
 		}
 
-		static bool VerifyEmailAddress(string address)
+		public static bool VerifyEmailAddress(string address)
 		{
 			string[] atCharacter;
 			string[] dotCharacter;
