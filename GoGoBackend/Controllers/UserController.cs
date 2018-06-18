@@ -59,6 +59,15 @@ namespace GoGoBackend.Controllers
 			{
 				return "invalid email address";
 			}
+			else if (username == "")
+			{
+				// todo: should also check if username is already taken
+				return "invalid username";
+			}
+			else if (password == "")
+			{
+				return "invalid password";
+			}
 
 			// create a semi-random validation string
 			Random r = new Random();
@@ -68,7 +77,8 @@ namespace GoGoBackend.Controllers
 
 			using (MD5 md5Hash = MD5.Create())
 			{
-				// salt it with the username
+				// get the hash of (username + password)
+				//  --  this is known as a salt and improves resistance to dictionary attacks
 				passwordHash = md5Hash.ComputeHash((username + password).Select(c => (byte)c).ToArray());
 			}
 
@@ -76,7 +86,7 @@ namespace GoGoBackend.Controllers
 			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
 			{
 				connection.Open();
-				string sql = "INSERT INTO [dbo].[table] (Username,PasswordHash,Email,Valdiation_String) VALUES(@username,@passwordHash,@email,@validationString)";
+				string sql = "INSERT INTO [dbo].[table] (Username,PasswordHash,Email,Validation_String) VALUES(@username,@passwordHash,@email,@validationString)";
 				SqlCommand cmd = new SqlCommand(sql, connection);
 				cmd.Parameters.AddWithValue("@username", username);
 				cmd.Parameters.AddWithValue("@passwordHash", passwordHash);
@@ -87,6 +97,7 @@ namespace GoGoBackend.Controllers
 
 			// validation email
 			Emails.Server.SendValidationMail(email, String.Format("{0}/api/User/{1}/{2}", Startup.serverName, username, validationString));
+			Emails.Server.SendValidationMail(email, String.Format("{0}/api/User/{1}/{2}", "http://localhost:56533", username, validationString));
 
 			return "success";
 		}

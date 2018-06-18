@@ -4,6 +4,9 @@ using System.Net.Mail;
 using System.Net.Mime;
 using System.Threading;
 using System.ComponentModel;
+using SendGrid;
+using SendGrid.Helpers.Mail;
+
 namespace Emails
 {
 	public class Server
@@ -32,8 +35,22 @@ namespace Emails
 			}
 			mailSent = true;
 		}
-		public static void SendValidationMail(string recipient, string validationString)
+		public static void SendValidationMail(string recipient, string validationLink)
 		{
+			var msg = new SendGridMessage();
+
+			msg.SetFrom(new EmailAddress("dx@example.com", "SendGrid DX Team"));
+
+			msg.AddTo(recipient);
+
+			msg.SetSubject("New account confirmation");
+
+			msg.AddContent(MimeType.Text, "Please click the following link to confirm your account.");
+			msg.AddContent(MimeType.Text, validationLink);
+			msg.
+
+			return;
+
 			// set up the SMTP host.
 			SmtpClient client = new SmtpClient(smtpServer);
 			// log in
@@ -51,7 +68,7 @@ namespace Emails
 			
 			// Specify the message content.
 			MailMessage message = new MailMessage(from, to);
-			message.Body = string.Format("Please click the following link to complete your registration: \n {0}", validationString);
+			message.Body = string.Format("Please click the following link to complete your registration: \n {0}", validationLink);
 			// Include some non-ASCII characters in body and subject.
 			string someArrows = new string(new char[] { '\u2190', '\u2191', '\u2192', '\u2193' });
 			message.Body += Environment.NewLine + someArrows;
