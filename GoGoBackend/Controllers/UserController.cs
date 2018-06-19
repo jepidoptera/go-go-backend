@@ -31,15 +31,16 @@ namespace GoGoBackend.Controllers
 		[HttpGet]
         public async Task Get()
         {
-			await SqlPipe.Sql("select * from [dbo].[Table] FOR JSON PATH").Stream(Response.Body, "['No Results Found']"); // correct new version
+			await SqlPipe.Sql("select * from [dbo].[Table] FOR JSON PATH").Stream(Response.Body, "['No Results Found']"); 
 		}
 
 		// GET: api/User/<username>
-		// all infor about a specific user
+		// all information about a specific user
+		// also probably disable (or at least password-protect) this method in production
 		[HttpGet("{id}")]
 		public async Task Get(string id)
 		{
-			var cmd = new SqlCommand("select * from [dbo].[Table] where Name = @id FOR JSON PATH, WITHOUT_ARRAY_WRAPPER");
+			var cmd = new SqlCommand("select * from [dbo].[Table] where Username = @id FOR JSON PATH, WITHOUT_ARRAY_WRAPPER");
 			cmd.Parameters.AddWithValue("id", id);
 			// await SqlPipe.Stream(cmd, Response.Body, "{}");
 			await SqlPipe.Sql(cmd).Stream(Response.Body, "{}");
@@ -48,11 +49,13 @@ namespace GoGoBackend.Controllers
 		// POST: api/User
 		// initializing a new user
 		[HttpPost]
-		public string Post()
+		public async Task<string> PostAsync()
 		{
 			string password = Request.Form["password"];
 			string username = Request.Form["username"];
 			string email = Request.Form["email"];
+
+			SqlCommand cmd;
 
 			// make sure all parameters are valid
 			if (!Emails.Server.VerifyEmailAddress(email))
@@ -61,33 +64,62 @@ namespace GoGoBackend.Controllers
 			}
 			else if (username == "")
 			{
-				// todo: should also check if username is already taken
 				return "invalid username";
 			}
 			else if (password == "")
 			{
 				return "invalid password";
 			}
+			else if (password.Length < 8)
+			{
+				return "please enter a password of at least 8 characters.";
+			}
+			else
+			{
+				// check if username is already taken
+				using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+				{
+					connection.Open();
+					cmd = new SqlCommand("Select Validated from [dbo].[table] where Username=@username", connection);
+					cmd.Parameters.AddWithValue("@username", username);
+					var result = cmd.ExecuteScalar();
+					if (result != null && (bool)result)
+					{
+						// username is registered and confirmed
+						return "username not available";
+					}
 
-			// create a semi-random validation string
-			Random r = new Random();
-			string validationString = MD5.Create().ComputeHash((username + password + r.NextDouble().ToString()).Select(c => (byte)c).ToArray()).ToHexString();
+					// similarly, check if email is used already
+					cmd = new SqlCommand("Select Validated from [dbo].[table] where Email=@email", connection);
+					cmd.Parameters.AddWithValue("@email", email);
+					result = cmd.ExecuteScalar();
+					if (result != null && (bool)result)
+					{
+						// email is already registered and confirmed
+						return "an account is already registered under that email.";
+					}
+				}
+			}
+
 
 			byte[] passwordHash;
+			string validationString;
 
 			using (MD5 md5Hash = MD5.Create())
 			{
 				// get the hash of (username + password)
 				//  --  this is known as a salt and improves resistance to dictionary attacks
 				passwordHash = md5Hash.ComputeHash((username + password).Select(c => (byte)c).ToArray());
+				// create a semi-random validation string
+				Random r = new Random();
+				validationString = md5Hash.ComputeHash((username + password + r.NextDouble().ToString()).Select(c => (byte)c).ToArray()).ToHexString();
 			}
 
 			// insert new username entry into the database
 			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
 			{
-				connection.Open();
 				string sql = "INSERT INTO [dbo].[table] (Username,PasswordHash,Email,Validation_String) VALUES(@username,@passwordHash,@email,@validationString)";
-				SqlCommand cmd = new SqlCommand(sql, connection);
+				cmd = new SqlCommand(sql, connection);
 				cmd.Parameters.AddWithValue("@username", username);
 				cmd.Parameters.AddWithValue("@passwordHash", passwordHash);
 				cmd.Parameters.AddWithValue("@email", email);
@@ -96,10 +128,10 @@ namespace GoGoBackend.Controllers
 			}
 
 			// validation email
-			Emails.Server.SendValidationMail(email, String.Format("{0}/api/User/{1}/{2}", Startup.serverName, username, validationString));
-			Emails.Server.SendValidationMail(email, String.Format("{0}/api/User/{1}/{2}", "http://localhost:56533", username, validationString));
+			await Emails.Server.SendValidationMail(email, String.Format("{0}/api/User/{1}/{2}", Startup.serverName, username, validationString));
+			await Emails.Server.SendValidationMail(email, String.Format("{0}/api/User/{1}/{2}", "http://localhost:56533", username, validationString));
 
-			return "success";
+			return "registered.  please check your email for a confirmation link, then press \"back\" to log in.";
 		}
 
 		// POST: api/User/username
@@ -157,21 +189,21 @@ namespace GoGoBackend.Controllers
 			}
 		}
 
-		[HttpPost("{username}, {validID}")]
+		[HttpGet("{username}/{validID}")]
 		// POST: api/User/<username>/<validation_code>
 		// user clicked link from validation email
-		public string ValidateUserLink(string username, string validID)
+		public async Task<string> ValidateUserLink(string username, string validID)
 		{
-			var cmd = new SqlCommand(
-				@"Select Validation_String from Todo
-				where Username = @username;");
-			cmd.Parameters.AddWithValue("@username", username);
-
 			string validation_string = "";
 			bool foundUser = false;
+			SqlCommand cmd;
 			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
 			{
 
+				cmd = new SqlCommand(
+					@"Select Validation_String from [dbo].[table]
+				where Username = @username;", connection);
+				cmd.Parameters.AddWithValue("@username", username);
 				connection.Open();
 				// Get the password hash of any user with this name
 				SqlDataReader reader = cmd.ExecuteReader();
@@ -204,13 +236,10 @@ namespace GoGoBackend.Controllers
 			// username and validation code match... update database to show this user is registered
 
 			cmd = new SqlCommand(
-				@"update [dbo].[table]
-				set Validated = 1,
-				Validation_Code = ""
-				where Username = @username");
+				@"update [dbo].[table] set Validated = 'true', Validation_String = '' where Username = @username");
 			cmd.Parameters.AddWithValue("@username", username);
 			// execute
-			SqlCommand.Sql(cmd).Exec();
+			await SqlCommand.Sql(cmd).Exec();
 
 			return "successfully registered";
 		}

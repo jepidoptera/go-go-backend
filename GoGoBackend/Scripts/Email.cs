@@ -2,10 +2,13 @@
 using System.Net;
 using System.Net.Mail;
 using System.Net.Mime;
-using System.Threading;
+using System.Threading.Tasks;
 using System.ComponentModel;
 using SendGrid;
 using SendGrid.Helpers.Mail;
+using System.Net.Http;
+using System.Net.Mail;
+using Microsoft.Extensions.Configuration;
 
 namespace Emails
 {
@@ -16,75 +19,37 @@ namespace Emails
 		const string smtpAddress = "gogobackend@gmail.com";
 		const string smtpPassword = "cat!!a3%malomor10tta761,,";
 
-		private static void SendCompletedCallback(object sender, AsyncCompletedEventArgs e)
+		public static async Task SendValidationMail(string recipient, string validationLink)
 		{
-			// Get the unique identifier for this asynchronous operation.
-			String token = (string)e.UserState;
+			// var msg = new SendGridMessage();
 
-			if (e.Cancelled)
-			{
-				Console.WriteLine("[{0}] Send canceled.", token);
-			}
-			if (e.Error != null)
-			{
-				Console.WriteLine("[{0}] {1}", token, e.Error.ToString());
-			}
-			else
-			{
-				Console.WriteLine("Message sent.");
-			}
-			mailSent = true;
-		}
-		public static void SendValidationMail(string recipient, string validationLink)
-		{
-			var msg = new SendGridMessage();
+			var from = new EmailAddress("test@example.com", "Example User");
+			var subject = "New Account Confirmation";
+			var to = new EmailAddress(recipient, "New User");
+			var plainTextContent = "Please click the following link to confirm your account.";
+			var htmlContent = string.Format("<a href = \"{0}\" target = \"_blank\">Confirm Account</a>", validationLink);
+			var msg = MailHelper.CreateSingleEmail(from, to, subject, plainTextContent, htmlContent);
 
-			msg.SetFrom(new EmailAddress("dx@example.com", "SendGrid DX Team"));
+			//msg.SetFrom(new EmailAddress("dx@example.com", "SendGrid DX Team"));
 
-			msg.AddTo(recipient);
+			//msg.AddTo(recipient);
 
-			msg.SetSubject("New account confirmation");
+			//msg.SetSubject("New account confirmation");
 
-			msg.AddContent(MimeType.Text, "Please click the following link to confirm your account.");
-			msg.AddContent(MimeType.Text, validationLink);
-			msg.
+			//msg.AddContent(MimeType.Text, "Please click the following link to confirm your account.");
+			//msg.AddContent(MimeType.Text, validationLink);
+
+			var apiKey = System.Environment.GetEnvironmentVariable("SENDGRID_API_KEY");
+			// this is definitely not how this is supposed to be done
+			// TODO: puzzle through documentation on azure key vaults
+			// or web config settings, or something better than this.
+			apiKey = "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";
+			var client = new SendGridClient(apiKey);
+			// send the damn email. clearly, the most important part.
+			var response = await client.SendEmailAsync(msg);
 
 			return;
 
-			// set up the SMTP host.
-			SmtpClient client = new SmtpClient(smtpServer);
-			// log in
-			client.Credentials = new NetworkCredential(smtpAddress, smtpPassword);
-
-			// Specify the e-mail sender.
-			// Create a mailing address that includes a UTF8 character
-			// in the display name.
-			MailAddress from = new MailAddress("noreply@omg.com",
-			   "GoGo " + (char)0xD8 + " Registration",
-			System.Text.Encoding.UTF8);
-			
-			// Set destinations for the e-mail message.
-			MailAddress to = new MailAddress(recipient);
-			
-			// Specify the message content.
-			MailMessage message = new MailMessage(from, to);
-			message.Body = string.Format("Please click the following link to complete your registration: \n {0}", validationLink);
-			// Include some non-ASCII characters in body and subject.
-			string someArrows = new string(new char[] { '\u2190', '\u2191', '\u2192', '\u2193' });
-			message.Body += Environment.NewLine + someArrows;
-			message.BodyEncoding = System.Text.Encoding.UTF8;
-			message.Subject = "email validiation";
-			message.SubjectEncoding = System.Text.Encoding.UTF8;
-			// Set the method that is called back when the send operation ends.
-			client.SendCompleted += new
-			SendCompletedEventHandler(SendCompletedCallback);
-			// The userState can be any object that allows your callback 
-			// method to identify this send operation.
-			// For this example, the userToken is a string constant.
-			string userState = "test message1";
-			client.SendAsync(message, userState);
-			// Clean up.
-			message.Dispose();
 		}
 
 		public static bool VerifyEmailAddress(string address)
