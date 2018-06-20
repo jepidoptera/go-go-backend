@@ -62,16 +62,21 @@ namespace Emails
 				dotCharacter = atCharacter[1].Split("."[0]);
 				if (dotCharacter.Length >= 2)
 				{
-					if (dotCharacter[dotCharacter.Length - 1].Length == 0)
+					foreach (string part in dotCharacter)
 					{
-						return false;
-					}
-					else
-					{
-						return true;
+						if (part.Length == 0)
+						{
+							return false;
+						}
 					}
 				}
 				else return false;
+
+				if (atCharacter[0].Length == 0)
+				{
+					return false;
+				}
+				return true;
 			}
 			else return false;
 		}

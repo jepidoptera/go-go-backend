@@ -83,20 +83,39 @@ namespace GoGoBackend.Controllers
 					cmd = new SqlCommand("Select Validated from [dbo].[table] where Username=@username", connection);
 					cmd.Parameters.AddWithValue("@username", username);
 					var result = cmd.ExecuteScalar();
-					if (result != null && (bool)result)
+					bool eraseRecord = false;
+					if (result != null)
 					{
-						// username is registered and confirmed
-						return "username not available";
+						// username is registered. is it confirmed?
+						if ((bool)result)
+						{
+							// registered and confirmed, can't use it
+							return "username not available";
+						}
+						// registered but not confirmed: overwrite
+						else eraseRecord = true;
 					}
 
 					// similarly, check if email is used already
 					cmd = new SqlCommand("Select Validated from [dbo].[table] where Email=@email", connection);
 					cmd.Parameters.AddWithValue("@email", email);
 					result = cmd.ExecuteScalar();
-					if (result != null && (bool)result)
+					if (result != null)
 					{
-						// email is already registered and confirmed
-						return "an account is already registered under that email.";
+						// email is already registered
+						if ((bool)result)
+						{
+							// can't use it
+							return "an account is already registered under that email.";
+						}
+						// registered, not confirmed. overwrite
+						else eraseRecord = true;
+					}
+
+					if (eraseRecord)
+					{
+						// overwriting a previous entry which was never confirmed
+						await DeleteUser(username);
 					}
 				}
 			}
@@ -111,6 +130,7 @@ namespace GoGoBackend.Controllers
 				//  --  this is known as a salt and improves resistance to dictionary attacks
 				passwordHash = md5Hash.ComputeHash((username + password).Select(c => (byte)c).ToArray());
 				// create a semi-random validation string
+				// TODO: make it actually (securely) random
 				Random r = new Random();
 				validationString = md5Hash.ComputeHash((username + password + r.NextDouble().ToString()).Select(c => (byte)c).ToArray()).ToHexString();
 			}
@@ -118,6 +138,7 @@ namespace GoGoBackend.Controllers
 			// insert new username entry into the database
 			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
 			{
+				connection.Open();
 				string sql = "INSERT INTO [dbo].[table] (Username,PasswordHash,Email,Validation_String) VALUES(@username,@passwordHash,@email,@validationString)";
 				cmd = new SqlCommand(sql, connection);
 				cmd.Parameters.AddWithValue("@username", username);
@@ -150,10 +171,11 @@ namespace GoGoBackend.Controllers
 
 			// check the password hash for the specified username
 			byte[] passcheck = new byte[16];
+			bool validated = false;
 			bool foundUser = false;
 			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
 			{
-				var cmd = new SqlCommand("select PasswordHash from [dbo].[Table] where Username = @id", connection);
+				var cmd = new SqlCommand("select PasswordHash, Validated from [dbo].[Table] where Username = @id", connection);
 				cmd.Parameters.AddWithValue("@id", username);
 				connection.Open();
 				// Get the password hash of any user with this name
@@ -163,6 +185,7 @@ namespace GoGoBackend.Controllers
 					while (reader.Read())
 					{
 						passcheck = (byte[])reader["PasswordHash"];
+						validated = (bool)reader["Validated"];
 						foundUser = true;
 					}
 				}
@@ -177,15 +200,21 @@ namespace GoGoBackend.Controllers
 			{
 				return "user not found";
 			}
+			// have they confirmed via email?
+			else if (!validated)
+			{
+				return "user registered but not confirmed.  please use the confirmation link that was emailed to you.";
+			}
 			// is the password valid??
 			// supposedly this comparison method is quite slow, but I don't think I care
-			else if (passwordHash.SequenceEqual(passcheck))
-			{
-				return "success";
-			}
-			else
+			else if (!passwordHash.SequenceEqual(passcheck))
 			{
 				return "wrong password";
+			}
+			// passed all the checks, you can log in now
+			else
+			{
+				return "success";
 			}
 		}
 
@@ -248,8 +277,13 @@ namespace GoGoBackend.Controllers
 		[HttpDelete("{id}")]
         public async Task Delete(string id)
         {
-			var cmd = new SqlCommand("delete [dbo].[Table] where Username = @id");
-			cmd.Parameters.AddWithValue("id", id);
+			await DeleteUser(id);
+		}
+
+		public async Task DeleteUser(string username)
+		{
+			    var cmd = new SqlCommand("delete [dbo].[Table] where Username = @username");
+			cmd.Parameters.AddWithValue("@username", username);
 			await SqlCommand.Sql(cmd).Exec();
 		}
 	}
