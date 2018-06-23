@@ -23,7 +23,7 @@ namespace Emails
 		{
 			// var msg = new SendGridMessage();
 
-			var from = new EmailAddress("test@example.com", "Example User");
+			var from = new EmailAddress("noreply@omisego.com", "User Confirm");
 			var subject = "New Account Confirmation";
 			var to = new EmailAddress(recipient, "New User");
 			var plainTextContent = "Please click the following link to confirm your account.";

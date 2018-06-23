@@ -16,7 +16,7 @@ namespace GoGoBackend
 {
     public class Startup
     {
-		public const string serverName = "gogobackend.database.windows.net";
+		public const string serverName = "https://gogobackend.database.windows.net";
 		public const string ConnString = "Server=" + serverName + ";Database=user_registry;User Id=Jepidoptera;Password=Gogopopterix-Billy";
 
 		public Startup(IConfiguration configuration)
