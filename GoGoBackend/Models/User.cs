@@ -8,6 +8,7 @@ namespace GoGoBackend.Models
     public class User
     {
 		public string name;
-		public string passwordHash;
+		public int stones;
+		public float rank;
     }
 }

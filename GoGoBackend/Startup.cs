@@ -16,10 +16,12 @@ namespace GoGoBackend
 {
     public class Startup
     {
-		public const string serverName = "https://gogobackend.database.windows.net";
-		public const string ConnString = "Server=" + serverName + ";Database=user_registry;User Id=Jepidoptera;Password=Gogopopterix-Billy";
+		public const string serverName = "gogobackend.database.windows.net";
+		public const string ConnString = // "Server=" + serverName + ";Database=user_registry;User Id=Jepidoptera;Password=Gogopopterix-Billy";
+		"Server=tcp:" + serverName + ",1433;Initial Catalog = user_registry; Persist Security Info=False;User ID = Jepidoptera; Password=" +
+			"Gogopopterix-Billy; MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout = 30;";
 
-		public Startup(IConfiguration configuration)
+	public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
         }
