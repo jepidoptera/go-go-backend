@@ -283,7 +283,7 @@ namespace GoGoBackend.Controllers
 
 		public async Task DeleteUser(string username)
 		{
-			    var cmd = new SqlCommand("delete [dbo].[Table] where Username = @username");
+			var cmd = new SqlCommand("delete [dbo].[Table] where Username = @username");
 			cmd.Parameters.AddWithValue("@username", username);
 			await SqlCommand.Sql(cmd).Exec();
 		}
