@@ -151,7 +151,7 @@ namespace GoGoBackend.Controllers
 			}
 
 			// validation email
-			await Emails.Server.SendValidationMail(email, String.Format("https://{0}/api/User/{1}/{2}", Startup.serverName, username, validationString));
+			await Emails.Server.SendValidationMail(email, String.Format("https://{0}/api/User/{1}/{2}", Startup.apiServer, username, validationString));
 			// await Emails.Server.SendValidationMail(email, String.Format("https://{0}/api/User/{1}/{2}", "http://localhost:56533", username, validationString));
 
 			return "registered.  please check your email for a confirmation link, then press \"back\" to log in.";
@@ -221,7 +221,7 @@ namespace GoGoBackend.Controllers
 		}
 
 		[HttpGet("{username}/{validID}")]
-		// POST: api/User/<username>/<validation_code>
+		// GET: api/User/<username>/<validation_code>
 		// user clicked link from validation email
 		public async Task<string> ValidateUserLink(string username, string validID)
 		{
