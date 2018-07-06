@@ -71,9 +71,9 @@ namespace GoGoBackend.Controllers
 			{
 				return "invalid password";
 			}
-			else if (password.Length < 8)
+			else if (password.Length < 7)
 			{
-				return "please enter a password of at least 8 characters.";
+				return "please enter a password of at least 7 characters.";
 			}
 			else
 			{
@@ -129,11 +129,12 @@ namespace GoGoBackend.Controllers
 			{
 				// get the hash of (username + password)
 				//  --  this is known as a salt and improves resistance to dictionary attacks
-				passwordHash = md5Hash.ComputeHash((username + password).Select(c => (byte)c).ToArray());
+				passwordHash = md5Hash.ComputeHash((username.ToLower() + password).Select(c => (byte)c).ToArray());
 				// create a semi-random validation string
 				// TODO: make it actually (securely) random
 				Random r = new Random();
-				validationString = md5Hash.ComputeHash((username + password + r.NextDouble().ToString()).Select(c => (byte)c).ToArray()).ToHexString();
+				validationString = md5Hash.ComputeHash(( username + password + System.DateTime.Now.ToString("dd-MM-yyyy HH:mm:ss") +
+					r.NextDouble().ToString()).Select(c => (byte)c).ToArray()).ToHexString();
 			}
 
 			// insert new username entry into the database
@@ -167,7 +168,7 @@ namespace GoGoBackend.Controllers
 			using (MD5 md5Hash = MD5.Create())
 			{
 				// get password hash salted with username
-				passwordHash = md5Hash.ComputeHash((username + password).Select(c => (byte)c).ToArray());
+				passwordHash = md5Hash.ComputeHash((username.ToLower() + password).Select(c => (byte)c).ToArray());
 			}
 
 			// check the password hash for the specified username
