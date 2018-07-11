@@ -9,12 +9,13 @@ using System.Data.SqlClient;
 using System.IO;
 using System.Security.Cryptography;
 using StringManipulation;
-using GoGoBackend.Models;
+using GoGoBackend.Games;
+using System.Threading;
 
 namespace GoGoBackend.Controllers
 {
     [Produces("application/json")]
-    [Route("api/User")]
+    [Route("api/user")]
     public class UserController : Controller
     {
 		private readonly IQueryPipe SqlPipe;
@@ -25,8 +26,8 @@ namespace GoGoBackend.Controllers
 			this.SqlCommand = sqlCommand;
 			this.SqlPipe = sqlPipe;
 		}
-
-		// GET: api/User
+		
+		// GET: api/user
 		// gets all data about all users
 		// probably disable this method in production
 		[HttpGet]
@@ -35,7 +36,7 @@ namespace GoGoBackend.Controllers
 			await SqlPipe.Sql("select * from [dbo].[Table] FOR JSON PATH").Stream(Response.Body, "['No Results Found']"); 
 		}
 
-		// GET: api/User/<username>
+		// GET: api/user/<username>
 		// all information about a specific user
 		// also probably disable (or at least password-protect) this method in production
 		[HttpGet("{id}")]
@@ -47,7 +48,7 @@ namespace GoGoBackend.Controllers
 			await SqlPipe.Sql(cmd).Stream(Response.Body, "{}");
 		}
 
-		// POST: api/User
+		// POST: api/user
 		// initializing a new user
 		[HttpPost]
 		public async Task<string> PostAsync()
@@ -151,14 +152,14 @@ namespace GoGoBackend.Controllers
 			}
 
 			// validation email
-			await Emails.Server.SendValidationMail(email, String.Format("https://{0}/api/User/{1}/{2}", Startup.apiServer, username, validationString));
-			// await Emails.Server.SendValidationMail(email, String.Format("https://{0}/api/User/{1}/{2}", "http://localhost:56533", username, validationString));
+			await Emails.Server.SendValidationMail(email, String.Format("https://{0}/api/user/{1}/{2}", Startup.apiServer, username, validationString));
+			// await Emails.Server.SendValidationMail(email, String.Format("https://{0}/api/user/{1}/{2}", "http://localhost:56533", username, validationString));
 
 			return "registered.  please check your email for a confirmation link, then press \"back\" to log in.";
 		}
 
-		// POST: api/User/username
-		// this is a request for a password validation
+		// POST: api/user/username
+		// this is a login attempt
 		[HttpPost("{username}")]
 		public string ValidatePassword(string username)
 		{
@@ -171,7 +172,7 @@ namespace GoGoBackend.Controllers
 				passwordHash = md5Hash.ComputeHash((username.ToLower() + password).Select(c => (byte)c).ToArray());
 			}
 
-			// check the password hash for the specified username
+			// check the password hash with the specified username
 			byte[] passcheck = new byte[16];
 			bool validated = false;
 			bool foundUser = false;
@@ -200,7 +201,7 @@ namespace GoGoBackend.Controllers
 			// does this user exist?
 			if (!foundUser)
 			{
-				return "user not found";
+				return "user not found. register new?  ------>";
 			}
 			// have they confirmed via email?
 			else if (!validated)
@@ -221,7 +222,7 @@ namespace GoGoBackend.Controllers
 		}
 
 		[HttpGet("{username}/{validID}")]
-		// GET: api/User/<username>/<validation_code>
+		// GET: api/user/<username>/<validation_code>
 		// user clicked link from validation email
 		public async Task<string> ValidateUserLink(string username, string validID)
 		{
@@ -275,7 +276,7 @@ namespace GoGoBackend.Controllers
 			return "successfully registered";
 		}
 
-		// DELETE: api/User/username
+		// DELETE: api/user/username
 		[HttpDelete("{id}")]
         public async Task Delete(string id)
         {

@@ -8,19 +8,33 @@ using Belgrade.SqlClient;
 using System.Data.SqlClient;
 using System.Security.Cryptography;
 using StringManipulation;
+using System.Threading.Tasks;
+using System.Threading;
+using System.Collections;
+using GoGoBackend.Games;
 
 namespace GoGoBackend.Controllers
 {
-    [Produces("application/json")]
-    [Route("api/Games")]
-    public class GamesController : Controller
+	[Produces("application/json")]
+    [Route("api/games")]
+	public class GamesController : Controller
     {
+
 		private readonly IQueryPipe SqlPipe;
 		private readonly ICommand SqlCommand;
 
-		// GET: api/Games
-		[HttpPost("{New}")]
-        public async Task<string> PostNewGame()
+		private readonly Dictionary<string, ActiveGame> activeGames;
+
+		public GamesController(ICommand sqlCommand, IQueryPipe sqlPipe)
+		{
+			this.SqlCommand = sqlCommand;
+			this.SqlPipe = sqlPipe;
+			activeGames = new Dictionary<string, ActiveGame>();
+		}
+
+		// GET: api/games/new
+		[HttpPost("new")]
+        public string PostNewGame()
         {
 			string gameID;
 			string player1 = Request.Form["Player1"];
@@ -53,8 +67,20 @@ namespace GoGoBackend.Controllers
 			// get request origin
 			var values = Request.Headers.GetCommaSeparatedValues("Origin");
 
-			return "game created";
+			// create a new active game
+			new ActiveGame(player1, player2, gameID);
+
+			return gameID;
         }
+
+		// POST: /api/Games/{ID}/Move
+		[HttpPost("{gameID}/move")]
+		public async Task<byte[]> MakeMove(string gameID, [FromBody]string player, [FromBody]int x, [FromBody]int y)
+		{
+			// todo: figure out whether or not it's this player's turn
+			// run this task again, thus releasing the current instance to return its value
+			return await Task.Run(() => Games.ActiveGame.activeGames[gameID].MakeMove((byte)x, (byte)y));
+		}
 
         // GET: api/Games/5
         [HttpGet("{id}", Name = "Get")]
