@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Threading;
+using StringManipulation;
 
 namespace GoGoBackend.Games
 {
@@ -11,9 +12,10 @@ namespace GoGoBackend.Games
 		private string username1, username2;
 		private ManualResetEvent mre = new ManualResetEvent(false);
 		private byte x, y;
-		private List<byte[]> moveHistory;
+		public List<byte[]> moveHistory;
+		// private bool active = false;
 
-		public static readonly Dictionary<string, ActiveGame> activeGames = new Dictionary<string, ActiveGame>();
+		public static Dictionary<string, ActiveGame> activeGames = new Dictionary<string, ActiveGame>();
 
 		public ActiveGame(string user1, string user2, string key)
 		{
@@ -23,11 +25,13 @@ namespace GoGoBackend.Games
 			activeGames[key] = this;
 		}
 
-		public byte[] MakeMove(byte x, byte y)
+		public string MakeMove(byte x, byte y)
 		{
+			// flag as active
+			// active = true;
+			// trigger the previous instance of MakeMove to return the value of this (current) move
 			this.x = x;
 			this.y = y;
-			// trigger the previous instance of MakeMove to return the value of this (current) move
 			mre.Set();
 			// now reset and wait to be called again, then return with the values from the next move
 			mre.Reset();
@@ -35,7 +39,7 @@ namespace GoGoBackend.Games
 			// record and return current move
 			byte[] move = new byte[2] { x, y };
 			moveHistory.Add(move);
-			return move;
+			return move.ToHexString();
 		}
 	}
 }

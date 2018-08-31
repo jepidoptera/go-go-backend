@@ -33,16 +33,15 @@ namespace GoGoBackend.Controllers
 		[HttpGet]
         public async Task Get()
         {
-			await SqlPipe.Sql("select * from [dbo].[Table] FOR JSON PATH").Stream(Response.Body, "['No Results Found']"); 
+			await SqlPipe.Sql("select * from [dbo].[Users] FOR JSON PATH").Stream(Response.Body, "['No Results Found']"); 
 		}
 
 		// GET: api/user/<username>
 		// all information about a specific user
-		// also probably disable (or at least password-protect) this method in production
 		[HttpGet("{id}")]
 		public async Task Get(string id)
 		{
-			var cmd = new SqlCommand("select * from [dbo].[Table] where Username = @id FOR JSON PATH, WITHOUT_ARRAY_WRAPPER");
+			var cmd = new SqlCommand("select * from [dbo].[Users] where username = @id FOR JSON PATH, WITHOUT_ARRAY_WRAPPER");
 			cmd.Parameters.AddWithValue("id", id);
 			// await SqlPipe.Stream(cmd, Response.Body, "{}");
 			await SqlPipe.Sql(cmd).Stream(Response.Body, "{}");
@@ -82,7 +81,7 @@ namespace GoGoBackend.Controllers
 				using (SqlConnection connection = new SqlConnection(Startup.ConnString))
 				{
 					connection.Open();
-					cmd = new SqlCommand("Select Validated from [dbo].[table] where Username=@username", connection);
+					cmd = new SqlCommand("Select Validated from [dbo].[Users] where username=@username", connection);
 					cmd.Parameters.AddWithValue("@username", username);
 					var result = cmd.ExecuteScalar();
 					bool eraseRecord = false;
@@ -99,7 +98,7 @@ namespace GoGoBackend.Controllers
 					}
 
 					// similarly, check if email is used already
-					cmd = new SqlCommand("Select Validated from [dbo].[table] where Email=@email", connection);
+					cmd = new SqlCommand("Select Validated from [dbo].[Users] where email=@email", connection);
 					cmd.Parameters.AddWithValue("@email", email);
 					result = cmd.ExecuteScalar();
 					if (result != null)
@@ -142,7 +141,7 @@ namespace GoGoBackend.Controllers
 			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
 			{
 				connection.Open();
-				string sql = "INSERT INTO [dbo].[table] (Username,PasswordHash,Email,Validation_String) VALUES(@username,@passwordHash,@email,@validationString)";
+				string sql = "INSERT INTO [dbo].[Users] (Username,PasswordHash,Email,Validation_String) VALUES(@username,@passwordHash,@email,@validationString)";
 				cmd = new SqlCommand(sql, connection);
 				cmd.Parameters.AddWithValue("@username", username);
 				cmd.Parameters.AddWithValue("@passwordHash", passwordHash);
@@ -152,7 +151,7 @@ namespace GoGoBackend.Controllers
 			}
 
 			// validation email
-			await Emails.Server.SendValidationMail(email, String.Format("https://{0}/api/user/{1}/{2}", Startup.apiServer, username, validationString));
+			await Emails.Server.SendValidationMail(email, String.Format("{0}/api/user/{1}/{2}", Startup.apiServer, username, validationString));
 			// await Emails.Server.SendValidationMail(email, String.Format("https://{0}/api/user/{1}/{2}", "http://localhost:56533", username, validationString));
 
 			return "registered.  please check your email for a confirmation link, then press \"back\" to log in.";
@@ -178,7 +177,7 @@ namespace GoGoBackend.Controllers
 			bool foundUser = false;
 			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
 			{
-				var cmd = new SqlCommand("select PasswordHash, Validated from [dbo].[Table] where Username = @id", connection);
+				var cmd = new SqlCommand("select PasswordHash, Validated from [dbo].[Users] where Username = @id", connection);
 				cmd.Parameters.AddWithValue("@id", username);
 				connection.Open();
 				// Get the password hash of any user with this name
@@ -233,7 +232,7 @@ namespace GoGoBackend.Controllers
 			{
 
 				cmd = new SqlCommand(
-					@"Select Validation_String from [dbo].[table]
+					@"Select Validation_String from [dbo].[Users]
 				where Username = @username;", connection);
 				cmd.Parameters.AddWithValue("@username", username);
 				connection.Open();
@@ -268,7 +267,7 @@ namespace GoGoBackend.Controllers
 			// username and validation code match... update database to show this user is registered
 
 			cmd = new SqlCommand(
-				@"update [dbo].[table] set Validated = 'true', Validation_String = '' where Username = @username");
+				@"update [dbo].[Users] set Validated = 'true', Validation_String = '' where Username = @username");
 			cmd.Parameters.AddWithValue("@username", username);
 			// execute
 			await SqlCommand.Sql(cmd).Exec();
@@ -285,7 +284,7 @@ namespace GoGoBackend.Controllers
 
 		public async Task DeleteUser(string username)
 		{
-			var cmd = new SqlCommand("delete [dbo].[Table] where Username = @username");
+			var cmd = new SqlCommand("delete [dbo].[Users] where Username = @username");
 			cmd.Parameters.AddWithValue("@username", username);
 			await SqlCommand.Sql(cmd).Exec();
 		}
