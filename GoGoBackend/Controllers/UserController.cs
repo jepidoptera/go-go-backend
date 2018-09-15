@@ -20,11 +20,13 @@ namespace GoGoBackend.Controllers
     {
 		private readonly IQueryPipe SqlPipe;
 		private readonly ICommand SqlCommand;
+		private Random rand;
 
 		public UserController(ICommand sqlCommand, IQueryPipe sqlPipe)
 		{
 			this.SqlCommand = sqlCommand;
 			this.SqlPipe = sqlPipe;
+			rand = new Random();
 		}
 		
 		// GET: api/user
@@ -71,9 +73,13 @@ namespace GoGoBackend.Controllers
 			{
 				return "invalid password";
 			}
-			else if (password.Length < 7)
+			else if (password == "password")
 			{
-				return "please enter a password of at least 7 characters.";
+				return "come on, you can do better.";
+			}
+			else if (password.Length < 8)
+			{
+				return "please enter a password of at least 8 characters.";
 			}
 			else
 			{
@@ -177,7 +183,7 @@ namespace GoGoBackend.Controllers
 			bool foundUser = false;
 			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
 			{
-				var cmd = new SqlCommand("select PasswordHash, Validated from [dbo].[Users] where Username = @id", connection);
+				var cmd = new SqlCommand("select PasswordHash, Validated from [dbo].[Users] where username = @id", connection);
 				cmd.Parameters.AddWithValue("@id", username);
 				connection.Open();
 				// Get the password hash of any user with this name
@@ -216,7 +222,54 @@ namespace GoGoBackend.Controllers
 			// passed all the checks, you can log in now
 			else
 			{
-				return "success";
+				// TODO: return an auth token
+				byte[] authToken;
+				byte[] authCodeHash;
+				using (MD5 md5Hash = MD5.Create())
+				{
+					// get a random auth token
+					authToken = md5Hash.ComputeHash((password + rand.NextDouble().ToString()).Select(c => (byte)c).ToArray());
+					authCodeHash = md5Hash.ComputeHash(authToken);
+				}
+				// update database with token hash
+				SqlCommand cmd = new SqlCommand(
+					@"update [dbo].[Users] set authCodeHash = @authCodeHash where username = @username");
+				cmd.Parameters.AddWithValue("@username", username);
+				cmd.Parameters.AddWithValue("@authCodeHash", authCodeHash);
+				// execute
+				SqlCommand.Sql(cmd).Exec();
+
+				// give preimage to user
+				return "success: " + authToken.ToHexString();
+			}
+		}
+
+		public bool ValidateAuthToken(string username, string token)
+		{
+			byte[] authCode = new byte[0];
+			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			{
+				var cmd = new SqlCommand("select authCodeHash from [dbo].[Users] where Username = @username", connection);
+				cmd.Parameters.AddWithValue("@username", username);
+				connection.Open();
+				// Get the auth token hash of any user with this name
+				SqlDataReader reader = cmd.ExecuteReader();
+				try
+				{
+					while (reader.Read())
+					{
+						authCode = (byte[])reader["authCodeHash"];
+					}
+				}
+				finally
+				{
+					// Always call Close when done reading.
+					reader.Close();
+				}
+			}
+			using (MD5 md5Hash = MD5.Create())
+			{
+				return md5Hash.ComputeHash(token.ToHexBytes()) == authCode;
 			}
 		}
 
