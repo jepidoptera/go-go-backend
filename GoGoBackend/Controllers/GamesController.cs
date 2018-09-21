@@ -44,7 +44,7 @@ namespace GoGoBackend.Controllers
 				using (SqlConnection connection = new SqlConnection(Startup.ConnString))
 				{
 					string sql = "select * from [dbo].[ActiveGames] WHERE (player2 is null or player2 = '') " +
-						"and player1LastPing > DATEADD(ss, -5, GETUTCDATE()) FOR JSON PATH";
+						"and player1LastMove > DATEADD(ss, -5, GetUtcDate()) FOR JSON PATH";
 					SqlCommand cmd = new SqlCommand(sql, connection);
 					await SqlPipe.Sql(cmd).Stream(Response.Body, "[]");
 				}
@@ -98,18 +98,14 @@ namespace GoGoBackend.Controllers
 			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
 			{
 				connection.Open();
-				string sql = "INSERT INTO [dbo].[ActiveGames] (Id,Player1,Player2,BoardSize,LastMove) VALUES(@Id,@Player1,@Player2,@BoardSize,@LastMove)";
+				string sql = "INSERT INTO [dbo].[ActiveGames] (Id,Player1,Player2,BoardSize,Player1LastMove) VALUES(@Id,@Player1,@Player2,@BoardSize,GetUtcDate())";
 				cmd = new SqlCommand(sql, connection);
 				cmd.Parameters.AddWithValue("Id", gameID);
 				cmd.Parameters.AddWithValue("@Player1", player1);
 				cmd.Parameters.AddWithValue("@Player2", player2);
 				cmd.Parameters.AddWithValue("@BoardSize", boardSize);
-				cmd.Parameters.AddWithValue("@LastMove", System.DateTime.Now); //.ToString(dateTimeString));
 				cmd.ExecuteNonQuery();
 			}
-
-			// get request origin
-			var values = Request.Headers.GetCommaSeparatedValues("Origin");
 
 			// create a new active game
 			new ActiveGame(player1, player2, gameID);
@@ -123,12 +119,15 @@ namespace GoGoBackend.Controllers
 		{
 			// unpack args
 			string player1 = Request.Form["player"];
+			string token = Request.Form["token"];
 			int x = Convert.ToInt32(Request.Form["x"]);
 			int y = Convert.ToInt32(Request.Form["y"]);
-			
+			int opCode = Convert.ToInt32(Request.Form["opcode"]);
+
 			// todo: figure out whether or not it's this player's turn
 			// if it's not, we should not respond the same way
 			// also todo: figure out if this is an actual active player and not just some rando from the internet
+
 
 			// is this game already active?
 			if (!activeGames.ContainsKey(gameID))
@@ -152,7 +151,7 @@ namespace GoGoBackend.Controllers
 						player1 = (string)reader["player1"];
 						player2 = (string)reader["player2"];
 						var nullhist = reader["history"];
-						history = (nullhist == DBNull.Value) ? new List<byte>(): (List<byte>)nullhist;
+						history = (nullhist == DBNull.Value) ? new List<byte>(): new List<byte>((byte[])nullhist);
 					}
 					dbConnection.Close();
 				}
@@ -162,21 +161,27 @@ namespace GoGoBackend.Controllers
 				new ActiveGame(player1, player2, gameID, history);
 			}
 
-			// run this task again, thus releasing the previous instance to return its value
-			string move = await Task.Run(() => activeGames[gameID].MakeMove(x, y));
+			// add the move to the active game object
+			activeGames[gameID].MakeMove(x, y, opCode);
 
-			// now that the move is complete, add to move history in the database
-			SqlCommand cmd;
-			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			if (x > 0)
 			{
-				connection.Open();
-				string sql = "UPDATE [dbo].[ActiveGames] SET history = @history WHERE Id = @gameID";
-				cmd = new SqlCommand(sql, connection);
-				cmd.Parameters.AddWithValue("@gameID", gameID);
-				cmd.Parameters.AddWithValue("@history", activeGames[gameID].moveHistory.ToArray());
-				// cmd.Parameters.AddWithValue("@datetime", System.DateTime.Now); //.ToString(dateTimeString));
-				cmd.ExecuteNonQuery();
+				// add to move history in the database
+				SqlCommand cmd;
+				using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+				{
+					connection.Open();
+					string sql = "UPDATE [dbo].[ActiveGames] SET history = @history WHERE Id = @gameID";
+					cmd = new SqlCommand(sql, connection);
+					cmd.Parameters.AddWithValue("@gameID", gameID);
+					cmd.Parameters.AddWithValue("@history", activeGames[gameID].moveHistory.ToArray());
+					// cmd.Parameters.AddWithValue("@datetime", System.DateTime.Now); //.ToString(dateTimeString));
+					cmd.ExecuteNonQuery();
+				}
 			}
+
+			// run this task again, thus releasing the previous instance to return its value
+			string move = await Task.Run(() => activeGames[gameID].AwaitMove());
 
 			return move;
 		}
@@ -199,13 +204,13 @@ namespace GoGoBackend.Controllers
 			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
 			{
 				connection.Open();
-				string sql = "UPDATE [dbo].[ActiveGames] SET player1LastPing = GetUTCDate() WHERE player1 = @playerID";
+				string sql = "UPDATE [dbo].[ActiveGames] SET player1LastMove = GetUTCDate() WHERE player1 = @playerID";
 				cmd = new SqlCommand(sql, connection);
 				cmd.Parameters.AddWithValue("@playerID", playerID);
 				// cmd.Parameters.AddWithValue("@datetime", System.DateTime.Now); // .ToString(dateTimeString));
 				cmd.ExecuteNonQuery();
 
-				sql = "UPDATE [dbo].[ActiveGames] SET player2LastPing = GetUTCDate() WHERE player2 = @playerID";
+				sql = "UPDATE [dbo].[ActiveGames] SET player2LastMove = GetUTCDate() WHERE player2 = @playerID";
 				cmd = new SqlCommand(sql, connection);
 				cmd.Parameters.AddWithValue("@playerID", playerID);
 				// cmd.Parameters.AddWithValue("@datetime", System.DateTime.Now); //.ToString(dateTimeString));
@@ -337,13 +342,6 @@ namespace GoGoBackend.Controllers
 			cmd.Parameters.AddWithValue("@GameID", gameID);
 			await SqlCommand.Sql(cmd).Exec();
 			return "gone";
-		}
-
-		// DELETE api/games/inactive
-		[HttpDelete("inactive")]
-		public void DeleteInactiveGames()
-		{
-			string sql = "DELETE [dbo].[ActiveGames] WHERE (player2 is null or player2 = '') and player1LastPing < DATEADD(ss, -5, GETUTCDATE())";
 		}
 
 		[HttpDelete("inactive/{playerID}")]
