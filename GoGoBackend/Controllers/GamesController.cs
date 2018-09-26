@@ -84,6 +84,7 @@ namespace GoGoBackend.Controllers
 			string player1 = Request.Form["Player1"];
 			string player2 = Request.Form["Player2"];
 			int boardSize = Convert.ToInt32(Request.Form["BoardSize"]);
+			int mode = Convert.ToInt32(Request.Form["Mode"]);
 
 			SqlCommand cmd;
 
@@ -98,12 +99,13 @@ namespace GoGoBackend.Controllers
 			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
 			{
 				connection.Open();
-				string sql = "INSERT INTO [dbo].[ActiveGames] (Id,Player1,Player2,BoardSize,Player1LastMove) VALUES(@Id,@Player1,@Player2,@BoardSize,GetUtcDate())";
+				string sql = "INSERT INTO [dbo].[ActiveGames] (Id,Player1,Player2,BoardSize,Mode,Player1LastMove) VALUES(@Id,@Player1,@Player2,@BoardSize,@Mode,GetUtcDate())";
 				cmd = new SqlCommand(sql, connection);
 				cmd.Parameters.AddWithValue("Id", gameID);
 				cmd.Parameters.AddWithValue("@Player1", player1);
 				cmd.Parameters.AddWithValue("@Player2", player2);
 				cmd.Parameters.AddWithValue("@BoardSize", boardSize);
+				cmd.Parameters.AddWithValue("@Mode", mode);
 				cmd.ExecuteNonQuery();
 			}
 
@@ -164,7 +166,7 @@ namespace GoGoBackend.Controllers
 			// add the move to the active game object
 			activeGames[gameID].MakeMove(x, y, opCode);
 
-			if (x > 0)
+			if (opCode < 255)
 			{
 				// add to move history in the database
 				SqlCommand cmd;
