@@ -52,6 +52,26 @@ namespace Emails
 
 		}
 
+		public static void SendNotificationEmail(string recipient, string message)
+		{
+			var from = new EmailAddress("noreply@omisego.com", "notification system");
+			var subject = "Move Notification";
+			var to = new EmailAddress(recipient, "User");
+			var plainTextContent = message;
+			var msg = MailHelper.CreateSingleEmail(from, to, subject, message, "");
+
+			var apiKey = System.Environment.GetEnvironmentVariable("SENDGRID_API_KEY");
+			// this is definitely not how this is supposed to be done
+			// TODO: puzzle through documentation on azure key vaults
+			// or web config settings, or something better than this.
+			apiKey = "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";
+			var client = new SendGridClient(apiKey);
+			// send the damn email. clearly, the most important part.
+			var response = client.SendEmailAsync(msg);
+
+			return;
+		}
+
 		public static bool VerifyEmailAddress(string address)
 		{
 			string[] atCharacter;

@@ -244,7 +244,7 @@ namespace GoGoBackend.Controllers
 			}
 		}
 
-		public bool ValidateAuthToken(string username, string token)
+		public static bool ValidateAuthToken(string username, string token)
 		{
 			byte[] authCode = new byte[0];
 			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
@@ -269,7 +269,7 @@ namespace GoGoBackend.Controllers
 			}
 			using (MD5 md5Hash = MD5.Create())
 			{
-				return md5Hash.ComputeHash(token.ToHexBytes()) == authCode;
+				return md5Hash.ComputeHash(token.ToHexBytes()).EqualsTo(authCode);
 			}
 		}
 
@@ -326,6 +326,74 @@ namespace GoGoBackend.Controllers
 			await SqlCommand.Sql(cmd).Exec();
 
 			return "successfully registered";
+		}
+
+		[HttpPost("{username}/setnotifications")]
+		public void ActivateNotifications(string username)
+		{
+			SetNotifications(username, true);
+		}
+
+		[HttpPost("{username}/unsetnotifications")]
+		public void DeactivateNotifications(string username)
+		{
+			SetNotifications(username, false);
+		}
+
+		public void SetNotifications(string username, bool on)
+		{
+			string token = Request.Form["authtoken"];
+			if (!ValidateAuthToken(username, token))
+			{
+				// no go
+				return;
+			}
+			SqlCommand cmd = (on) 
+				? new SqlCommand(@"update [dbo].[Users] set EmailNotifications = 'true' where Username = @username")
+				: new SqlCommand(@"update [dbo].[Users] set EmailNotifications = 'false' where Username = @username");
+			cmd.Parameters.AddWithValue("@username", username);
+			// execute
+			SqlCommand.Sql(cmd).Exec();
+		}
+
+		public static bool NotificationsOn(string username)
+		{
+			bool returnVal = false;
+			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			{
+				var cmd = new SqlCommand("select EmailNotifications from [dbo].[Users] where Username = @username", connection);
+				cmd.Parameters.AddWithValue("@username", username);
+				connection.Open();
+				// Get the auth token hash of any user with this name
+				SqlDataReader reader = cmd.ExecuteReader();
+				try
+				{
+					while (reader.Read())
+					{
+						returnVal = (bool)reader["EmailNotifications"];
+					}
+				}
+				finally
+				{
+					// Always call Close when done reading.
+					reader.Close();
+				}
+			}
+			return returnVal;
+		}
+
+		public static void SendEmailNotification(string username, string message)
+		{
+			// retrieve user's email address
+			string email = "";
+			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			{
+				connection.Open();
+				SqlCommand cmd = new SqlCommand("Select email from [dbo].[Users] where username=@username", connection);
+				cmd.Parameters.AddWithValue("@username", username);
+				email = (string)cmd.ExecuteScalar();
+			}
+			Emails.Server.SendNotificationEmail(email, message);
 		}
 
 		// DELETE: api/user/username
