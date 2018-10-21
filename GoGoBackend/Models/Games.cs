@@ -6,9 +6,9 @@ using System.Threading;
 using StringManipulation;
 using Shapes;
 
-namespace GoGoBackend.Games
+namespace GoGoBackend.Go
 {
-	public class ActiveGame
+	public class Game
 	{
 		private class Point
 		{
@@ -21,6 +21,12 @@ namespace GoGoBackend.Games
 			}
 		}
 
+		public class SimpleNode
+		{
+			public int index;
+			public int[] neighbors;
+		}
+
 		public string player1, player2;
 		public List<byte> moveHistory;
 		public int gameMode;
@@ -30,8 +36,8 @@ namespace GoGoBackend.Games
 		public int whiteScore = 0;
 		public int blackScore = 0;
 
-		private const int black = 1;
-		private const int white = 2;
+		private const int stone_black = 1;
+		private const int stone_white = 2;
 
 		private int passTurns;
 		private int turn;
@@ -41,15 +47,15 @@ namespace GoGoBackend.Games
 
 		// private bool active = false;
 
-		public static Dictionary<string, ActiveGame> activeGames = new Dictionary<string, ActiveGame>();
+		public static Dictionary<string, Game> activeGames = new Dictionary<string, Game>();
 
 		// constructor overloads - with or without history
-		public ActiveGame(string user1, string user2, int boardSize, int gameMode, string key)
+		public Game(string user1, string user2, int boardSize, int gameMode, string key)
 		{
 			Initialize(user1, user2, boardSize, gameMode, key, new List<byte>());
 		}
 
-		public ActiveGame(string user1, string user2, int boardSize, int gameMode, string key, List<byte> history)
+		public Game(string user1, string user2, int boardSize, int gameMode, string key, List<byte> history)
 		{
 			Initialize(user1, user2, boardSize, gameMode, key, history);
 		}
@@ -76,7 +82,14 @@ namespace GoGoBackend.Games
 			return string.Format("{0},{1},{2}", this.x, this.y, this.opCode);
 		}
 
-		public bool MakeMove(int x, int y, int opCode)
+		// opcodes reference:
+		// 0: pass
+		// 1: black
+		// 2: white
+		// 101: illegal move
+		// 200: game over
+		// 255: ping
+		public void MakeMove(int x, int y, int opCode)
 		{
 			// record current move
 			if (opCode < 255)
@@ -85,19 +98,31 @@ namespace GoGoBackend.Games
 				this.y = (byte)y;
 				this.opCode = (byte)opCode;
 				// try to play that move
-				if (!TryPlayStone(LocationOf(x, y), opCode)) return false;
-
-				moveHistory.Add(this.x);
-				moveHistory.Add(this.y);
-				moveHistory.Add(this.opCode);
+				if (TryPlayStone(LocationOf(x, y), opCode))
+				{
+					// success
+					moveHistory.Add(this.x);
+					moveHistory.Add(this.y);
+					moveHistory.Add(this.opCode);
+					// if game ends, return opcode 200
+					if (over)
+					{
+						this.opCode = 200;
+					}
+				}
+				else
+				{
+					// illegal move, lose one turn
+					this.opCode = 101;
+				}
 				// trigger the previous instance of MakeMove to return the value of this (current) move
 				mre.Set();
-				return true;
+				return;
 			}
 			else
 			{
 				// opcode == 255 indicates this isn't a real move but just priming the resetEvent to receive the next one
-				return true;
+				return;
 			}
 		}
 
@@ -105,6 +130,11 @@ namespace GoGoBackend.Games
 		// if the move isn't legal for any reason, return false
 		bool TryPlayStone(int location, int color)
 		{
+			if (color == 0)
+			{
+				PassTurn();
+				return true;
+			}
 			// gotta play in turn
 			if (color != turn) return false;
 
@@ -144,6 +174,9 @@ namespace GoGoBackend.Games
 		{
 			foreach (int stone in captures)
 			{
+				// -1 point for the player whose stone was captured
+				if (gameState[stone].stone == stone_black) blackScore -= 1;
+				if (gameState[stone].stone == stone_white) whiteScore -= 1;
 				gameState[stone].stone = 0;
 			}
 		}
@@ -165,7 +198,7 @@ namespace GoGoBackend.Games
 		void NextTurn()
 		{
 			// switch turns
-			turn = (turn == white) ? black : white;
+			turn = (turn == stone_white) ? stone_black : stone_white;
 		}
 
 		// create a list of points which contain stones which would be captured if current player moves at [location]
@@ -247,14 +280,15 @@ namespace GoGoBackend.Games
 			}
 		}
 
-		int[] Score(out List<int> blackTerritory, out List<int> whiteTerritory)
+		int[] Score(out List<int> dead_stones)
 		{
 			// find the score between two players on the given board
+			dead_stones = new List<int>();
 			bool[] scored = new bool[gameState.Length];
 			List<int>[] territory = new List<int>[3] { new List<int>(), new List<int>(), new List<int>() };
 			List<int> nullTerritory = territory[0];
-			blackTerritory = territory[1];
-			whiteTerritory = territory[2];
+			List<int> blackTerritory = territory[1];
+			List<int> whiteTerritory = territory[2];
 			for (int i = 0; i < gameState.Length; i++)
 			{
 				if (gameState[i].owner == 0)
@@ -263,16 +297,16 @@ namespace GoGoBackend.Games
 					if (gameState[i].stone == 0)
 					{
 						// empty, uncounted space
-						int black = 0, white = 0;
+						int blackBorders = 0, whiteBorders = 0;
 						GroupAlike(i, out nullTerritory, out List<int> surroundings);
 						// count white vs. black stones surrounding the territory
 						foreach (int p in surroundings)
 						{
-							if (gameState[p].stone == black) black += 1;
-							else white += 1;
+							if (gameState[p].stone == stone_black) blackBorders += 1;
+							else whiteBorders += 1;
 						}
 						// this is kinda crude, but should suffice in most circumstances
-						int winner = (black > white) ? black : white;
+						int winner = (blackBorders > whiteBorders) ? stone_black : stone_white;
 						territory[winner].AddRange(nullTerritory);
 						// mark the whole region as scored
 						foreach (int p in nullTerritory)
@@ -291,7 +325,7 @@ namespace GoGoBackend.Games
 					// a group of stones which hasn't been processed yet
 					bool safe = false;
 					int groupColor = gameState[i].stone;
-					int opponent = (groupColor == black) ? white : black;
+					int opponent = (groupColor == stone_black) ? stone_white : stone_black;
 					GroupAlike(i, out List<int> group, out List<int> surroundings);
 					// does this group border on any friendly territory?
 					foreach (int p in surroundings)
@@ -319,16 +353,18 @@ namespace GoGoBackend.Games
 						{
 							gameState[p].owner = opponent;
 						}
+						// capture stones
+						dead_stones.AddRange(group);
 					}
 				}
 			}
 
-			return new int[2] { blackTerritory.Count, whiteTerritory.Count };
+			return new int[2] { blackTerritory.Count + blackScore, whiteTerritory.Count + whiteScore };
 		}
 
 		void PlayThrough(List<byte> history, int boardSize = 19, int boardType = 0)
 		{
-			for (int i = moveHistory.Count; i < history.Count; i += 3)
+			for (int i = 0; i < history.Count; i += 3)
 			{
 				// three bytes at a time; one corresponds to x and the other to y 
 				// (or both to location, as the case may be)
@@ -360,12 +396,14 @@ namespace GoGoBackend.Games
 		}
 
 		// the game has ended
-		readonly int stonesCaptured = 0;
-		List<int> whiteTerritory, blackTerritory;
 		void GameOver()
 		{
-			int[] scores = Score(out blackTerritory, out whiteTerritory);
+			List<int> captiveStones;
+			int[] scores = Score(out captiveStones);
+			// capture those which were surrounded in enemy territory
+			CaptureStones(captiveStones);
 			over = true;
+			// save final scores
 			blackScore = scores[0];
 			whiteScore = scores[1];
 		}
@@ -469,5 +507,34 @@ namespace GoGoBackend.Games
 			return neighbors;
 		}
 
+		// return a simplified node graph describing the board
+		public SimpleNode[] GetNodes()
+		{
+			SimpleNode[] returnVal = new SimpleNode[gameState.Length];
+			for (int i = 0; i < returnVal.Length; i++)
+			{
+				returnVal[i] = new SimpleNode
+				{
+					index = i,
+					neighbors = new int[gameState[i].neighbors.Count]
+				};
+				for (int j = 0; j < returnVal[i].neighbors.Length; j++)
+				{
+					returnVal[i].neighbors[j] = gameState[i].neighbors[j].index;
+				}
+			}
+			return returnVal;
+		}
+
+		public int[] GameState()
+		{
+
+			int[] returnval = new int[gameState.Length];
+			for (int i = 0; i < gameState.Length; i++)
+			{
+				returnval[i] = gameState[i].stone;
+			}
+			return returnval;
+		}
 	}
 }

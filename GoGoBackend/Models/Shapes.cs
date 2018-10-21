@@ -208,14 +208,6 @@ namespace Shapes
 			return subs;
 		}
 
-		public TriangleGrid(int vertsPerSide)
-		{
-			// simple constructor
-			this.vertsPerSide = vertsPerSide;
-			this.nodes = new Node[(int)((vertsPerSide + 1) * (vertsPerSide / 2f))];
-			this.triangles = new List<int>();
-		}
-
 		public TriangleGrid(int vertsPerSide, int startIndex = 0, Node[] rightEdge = null, Node[] leftEdge = null, Node[] bottomEdge = null)
 		{
 			// full scale constructor

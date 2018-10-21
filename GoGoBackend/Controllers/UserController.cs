@@ -9,7 +9,7 @@ using System.Data.SqlClient;
 using System.IO;
 using System.Security.Cryptography;
 using StringManipulation;
-using GoGoBackend.Games;
+using GoGoBackend.Go;
 using System.Threading;
 
 namespace GoGoBackend.Controllers

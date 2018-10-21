@@ -10,8 +10,8 @@ using System.Security.Cryptography;
 using StringManipulation;
 using System.Threading;
 using System.Collections;
-using GoGoBackend.Games;
-using System.Linq;
+using GoGoBackend.Go;
+using Newtonsoft.Json;
 
 namespace GoGoBackend.Controllers
 {
@@ -23,7 +23,7 @@ namespace GoGoBackend.Controllers
 		private readonly IQueryPipe SqlPipe;
 		private readonly ICommand SqlCommand;
 
-		private static Dictionary<string, ActiveGame> activeGames;
+		private static Dictionary<string, Game> activeGames;
 
 		public const string dateTimeString = "dd-MM-yyyy HH:mm:ss";
 
@@ -31,7 +31,7 @@ namespace GoGoBackend.Controllers
 		{
 			this.SqlCommand = sqlCommand;
 			this.SqlPipe = sqlPipe;
-			activeGames = Games.ActiveGame.activeGames;
+			activeGames = Go.Game.activeGames;
 		}
 
 		// GET: api/games/open
@@ -118,7 +118,7 @@ namespace GoGoBackend.Controllers
 			}
 
 			// create a new active game
-			new ActiveGame(player1, player2, boardSize, mode, gameID);
+			new Game(player1, player2, boardSize, mode, gameID);
 
 			return gameID;
 		}
@@ -134,6 +134,7 @@ namespace GoGoBackend.Controllers
 			int x = Convert.ToInt32(Request.Form["x"]);
 			int y = Convert.ToInt32(Request.Form["y"]);
 			int opCode = Convert.ToInt32(Request.Form["opcode"]);
+			Go.Game game;
 
 			// todo: figure out whether or not it's this player's turn
 			// if it's not, we should not respond the same way
@@ -147,49 +148,16 @@ namespace GoGoBackend.Controllers
 			if (!activeGames.ContainsKey(gameID))
 			{
 				// no? better activate it
-				List<byte> history = new List<byte>();
-				string player1 = "", player2 = "";
-				int gameMode = 0, boardSize = 0;
-
-				// get game info from database
-				string sql = "Select player1, player2, history from [dbo].[ActiveGames] where Id = @gameID";
-				using (SqlConnection dbConnection = new SqlConnection(Startup.ConnString))
-				using (SqlCommand dbCommand = new SqlCommand(sql, dbConnection))
+				if (!ActivateGame(gameID))
 				{
-					dbCommand.Parameters.AddWithValue("@gameID", gameID);
-					dbConnection.Open();
-
-					SqlDataReader reader = dbCommand.ExecuteReader();
-
-					while (reader.Read())
-					{
-						player1 = (string)reader["player1"];
-						player2 = (string)reader["player2"];
-						gameMode = (int)reader["mode"];
-						boardSize = (int)reader["boardSize"];
-						var nullhist = reader["history"];
-						history = (nullhist == DBNull.Value) ? new List<byte>() : new List<byte>((byte[])nullhist);
-					}
-					dbConnection.Close();
+					// doesn't exist
+					return "this game isn't real.";
 				}
-				// does this game even exist?? sanity check
-				if (player2 == "") return "this game isn't real";
-				// model it as an object with manual reset events
-				new ActiveGame(player1, player2, boardSize, gameMode, gameID, history);
 			}
-			otherPlayer = (activeGames[gameID].player1 == currentPlayer)
-				? activeGames[gameID].player2
-				: activeGames[gameID].player1;
+			game = activeGames[gameID];
 
 			// add the move to the active game object
-			activeGames[gameID].MakeMove(x, y, opCode);
-
-			// determine if game is over
-			// if so, end it and reward tokens to players
-			if (activeGames[gameID].over)
-			{
-				return "game over";
-			}
+			game.MakeMove(x, y, opCode);
 
 			if (opCode < 255)
 			{
@@ -201,30 +169,92 @@ namespace GoGoBackend.Controllers
 					string sql = "UPDATE [dbo].[ActiveGames] SET history = @history WHERE Id = @gameID";
 					cmd = new SqlCommand(sql, connection);
 					cmd.Parameters.AddWithValue("@gameID", gameID);
-					cmd.Parameters.AddWithValue("@history", activeGames[gameID].moveHistory.ToArray());
+					cmd.Parameters.AddWithValue("@history", game.moveHistory.ToArray());
 					// cmd.Parameters.AddWithValue("@datetime", System.DateTime.Now); //.ToString(dateTimeString));
 					cmd.ExecuteNonQuery();
 				}
 
 				// if players are signed up for email notifications, send those out
+				otherPlayer = (game.player1 == currentPlayer)
+					? game.player2
+					: game.player1;
+
+				string message;
+				if (opCode == 0)
+				{
+					message = string.Format("{0} passed their move.  It is now {1}'s turn.", currentPlayer, otherPlayer);
+				}
+				else if (opCode == 200)
+				{
+					message = string.Format("The game is now over.  Final score: \n {0}: {1} \n {2}: {3}",
+						game.player1, game.blackScore, game.player2, game.whiteScore);
+				}
+				else if (opCode == 101)
+				{
+					message = string.Format("{0} attempted an illegal move at {1}, {2} and was rejected. It is now {2}'s turn", currentPlayer, x, y, otherPlayer);
+				}
+				else
+				{
+					message = string.Format("{0} played at {1}, {2}. It is now {2}'s turn", currentPlayer, x, y, otherPlayer);
+				}
 				if (UserController.NotificationsOn(currentPlayer))
 				{
-					UserController.SendEmailNotification(currentPlayer, 
-						string.Format("{0} played at {1}, {2}. It is now {2}'s turn", currentPlayer, x, y, otherPlayer));
+					UserController.SendEmailNotification(currentPlayer, message);
 				}
 				if (UserController.NotificationsOn(otherPlayer))
 				{
-					UserController.SendEmailNotification(otherPlayer, 
-						string.Format("{0} played at {1}, {2}. It is now {2}'s turn", currentPlayer, x, y, otherPlayer));
+					UserController.SendEmailNotification(otherPlayer, message);
 				}
 			}
 
-			// run this task again, thus releasing the previous instance to return its value
-			string move = await Task.Run(() => activeGames[gameID].AwaitMove());
-
-			return move;
+			// is this end of game?
+			if (game.over)
+			{
+				// if so, end it and reward tokens to players
+				// TODO: reward erc20 tokens
+				return "0,0,200";
+			}
+			else
+			{
+				// otherwise run this task again, thus releasing the previous instance to return its value
+				string move = await Task.Run(() => game.AwaitMove());
+				return move;
+			}
 		}
 
+		private bool ActivateGame(string gameID)
+		{
+			List<byte> history = new List<byte>();
+			string player1 = "", player2 = "";
+			int gameMode = 0, boardSize = 0;
+
+			// get game info from database
+			string sql = "Select player1, player2, boardSize, mode, history from [dbo].[ActiveGames] where Id = @gameID";
+			using (SqlConnection dbConnection = new SqlConnection(Startup.ConnString))
+			using (SqlCommand dbCommand = new SqlCommand(sql, dbConnection))
+			{
+				dbCommand.Parameters.AddWithValue("@gameID", gameID);
+				dbConnection.Open();
+
+				SqlDataReader reader = dbCommand.ExecuteReader();
+
+				while (reader.Read())
+				{
+					player1 = (string)reader["player1"];
+					player2 = (string)reader["player2"];
+					gameMode = (int)reader["mode"];
+					boardSize = (int)reader["boardSize"];
+					var nullhist = reader["history"];
+					history = (nullhist == DBNull.Value) ? new List<byte>() : new List<byte>((byte[])nullhist);
+				}
+				dbConnection.Close();
+			}
+			// does this game even exist?? sanity check
+			if (player2 == "") return false;
+			// model it as an object with manual reset events and gamestate
+			new Game(player1, player2, boardSize, gameMode, gameID, history);
+			return true; // success
+		}
 
 		// GET: api/games/{ID}
 		[HttpGet("{gameID}")]
@@ -234,6 +264,41 @@ namespace GoGoBackend.Controllers
 			var cmd = new SqlCommand("SELECT * FROM [dbo].[ActiveGames] WHERE Id = @gameID FOR JSON PATH, WITHOUT_ARRAY_WRAPPER");
 			cmd.Parameters.AddWithValue("gameID", gameID);
 			await SqlPipe.Sql(cmd).Stream(Response.Body, "{}");
+		}
+
+		// return the node graph for this game as a json object
+		[HttpGet("{gameID}/nodes")]
+		public string Nodes(string gameID)
+		{
+			if (!activeGames.ContainsKey(gameID))
+			{
+				if (!ActivateGame(gameID))
+				{
+					return "none";
+				}
+			}
+			// return a json object containing this game's node map
+			Go.Game.SimpleNode[] nodes = activeGames[gameID].GetNodes();
+			string json = JsonConvert.SerializeObject(nodes);
+			return json;
+		}
+
+		// return an array describing the state of each node
+		[HttpGet("{gameID}/state")]
+		public string GameState(string gameID)
+		{
+			//// activate this game if need be
+			//if (!activeGames.ContainsKey(gameID))
+			//{
+				if (!ActivateGame(gameID))
+				{
+					return "none";
+				}
+			//}
+			// get state
+			int[] nodes = activeGames[gameID].GameState();
+			string returnVal = string.Join(',', nodes);
+			return returnVal;
 		}
 
 		// GET: api/games/ping/{playerID}
