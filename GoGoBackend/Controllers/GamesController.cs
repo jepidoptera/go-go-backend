@@ -56,7 +56,7 @@ namespace GoGoBackend.Controllers
 			}
 		}
 
-		// GET: api/games/open
+		// GET: api/games/ongoing/{playerID}
 		[HttpGet("ongoing/{playerID}")]
 		public async Task ListOngoingGames(string playerID)
 		{
@@ -64,6 +64,20 @@ namespace GoGoBackend.Controllers
 			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
 			{
 				string sql = "select * from [dbo].[ActiveGames] WHERE (player2 = @playerID or player1 = @playerID and player2 is not null) FOR JSON PATH";
+				SqlCommand cmd = new SqlCommand(sql, connection);
+				cmd.Parameters.AddWithValue("@playerID", playerID);
+				await SqlPipe.Sql(cmd).Stream(Response.Body, "[]");
+			}
+		}
+
+		// GET: api/games/challenge/{playerID}
+		[HttpGet("challenge/{playerID}")]
+		public async Task ListChallengeGames(string playerID)
+		{
+			// return a comma-separated list of challenges issued to this player
+			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			{
+				string sql = "select * from [dbo].[ActiveGames] WHERE (player2 = @playerID AND history IS NULL) FOR JSON PATH";
 				SqlCommand cmd = new SqlCommand(sql, connection);
 				cmd.Parameters.AddWithValue("@playerID", playerID);
 				await SqlPipe.Sql(cmd).Stream(Response.Body, "[]");
@@ -117,9 +131,6 @@ namespace GoGoBackend.Controllers
 				cmd.ExecuteNonQuery();
 			}
 
-			// create a new active game
-			new Game(player1, player2, boardSize, mode, gameID);
-
 			return gameID;
 		}
 
@@ -144,7 +155,7 @@ namespace GoGoBackend.Controllers
 				return "auth token invalid";
 			}
 
-			// is this game already active?
+			// is this game already active ?
 			if (!activeGames.ContainsKey(gameID))
 			{
 				// no? better activate it
@@ -155,6 +166,22 @@ namespace GoGoBackend.Controllers
 				}
 			}
 			game = activeGames[gameID];
+
+			// is this move valid? (no playing on other player's turn or sending "game over" opcode)
+			if (!new List<int>() { 0, 1, 2, 255 }.Contains(opCode))
+			{
+				return "invalid opcode.";
+			}
+			if (currentPlayer == game.player1 && opCode == 2 ||
+				currentPlayer == game.player2 && opCode == 1)
+			{
+				return "wait your turn.";
+			}
+			// is this player even in this game??
+			if (currentPlayer != game.player1 && currentPlayer != game.player2)
+			{
+				return "this is not your game.";
+			}
 
 			// add the move to the active game object
 			game.MakeMove(x, y, opCode);
@@ -267,7 +294,7 @@ namespace GoGoBackend.Controllers
 		}
 
 		// return the node graph for this game as a json object
-		[HttpGet("{gameID}/nodes")]
+		[HttpGet("nodes/{gameID}")]
 		public string Nodes(string gameID)
 		{
 			if (!activeGames.ContainsKey(gameID))
@@ -284,17 +311,17 @@ namespace GoGoBackend.Controllers
 		}
 
 		// return an array describing the state of each node
-		[HttpGet("{gameID}/state")]
+		[HttpGet("state/{gameID}")]
 		public string GameState(string gameID)
 		{
-			//// activate this game if need be
-			//if (!activeGames.ContainsKey(gameID))
-			//{
+			// activate this game if need be
+			if (!activeGames.ContainsKey(gameID))
+			{
 				if (!ActivateGame(gameID))
 				{
 					return "none";
 				}
-			//}
+			}
 			// get state
 			int[] nodes = activeGames[gameID].GameState();
 			string returnVal = string.Join(',', nodes);

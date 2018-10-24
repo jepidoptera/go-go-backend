@@ -7,7 +7,6 @@ using System.ComponentModel;
 using SendGrid;
 using SendGrid.Helpers.Mail;
 using System.Net.Http;
-using System.Net.Mail;
 using Microsoft.Extensions.Configuration;
 
 namespace Emails

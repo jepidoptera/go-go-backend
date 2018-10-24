@@ -18,11 +18,10 @@ namespace GoGoBackend
     {
 		public const string serverName = "gogobackend.database.windows.net";
 		public const string apiServer = "https://gogobackend.azurewebsites.net";
-		public const string ConnString = // "Server=" + serverName + ";Database=user_registry;User Id=Jepidoptera;Password=Gogopopterix-Billy";
-		"Server=tcp:" + serverName + ",1433;Initial Catalog = user_registry; Persist Security Info=False;User ID = Jepidoptera; Password=" +
-			"Gogopopterix-Billy; MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout = 30;";
+		public const string ConnString = "Server=tcp:" + serverName + ",1433;Initial Catalog = user_registry; Persist Security Info=False;User ID = Jepidoptera; " +
+			"Password=Gogopopterix-Billy; MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout = 30;";
 
-	public Startup(IConfiguration configuration)
+		public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
         }
@@ -32,8 +31,6 @@ namespace GoGoBackend
 		// This method gets called by the runtime. Use this method to add services to the container.
 		public void ConfigureServices(IServiceCollection services)
 		{
-
-
 			services.AddTransient<IQueryPipe>(_ => new QueryPipe(new SqlConnection(ConnString)));
 			services.AddTransient<ICommand>(_ => new Command(new SqlConnection(ConnString)));
 

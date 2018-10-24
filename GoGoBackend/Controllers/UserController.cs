@@ -14,10 +14,10 @@ using System.Threading;
 
 namespace GoGoBackend.Controllers
 {
-    [Produces("application/json")]
-    [Route("api/user")]
-    public class UserController : Controller
-    {
+	[Produces("application/json")]
+	[Route("api/user")]
+	public class UserController : Controller
+	{
 		private readonly IQueryPipe SqlPipe;
 		private readonly ICommand SqlCommand;
 		private Random rand;
@@ -28,14 +28,14 @@ namespace GoGoBackend.Controllers
 			this.SqlPipe = sqlPipe;
 			rand = new Random();
 		}
-		
+
 		// GET: api/user
 		// gets all data about all users
 		// probably disable this method in production
 		[HttpGet]
-        public async Task Get()
-        {
-			await SqlPipe.Sql("select * from [dbo].[Users] FOR JSON PATH").Stream(Response.Body, "['No Results Found']"); 
+		public async Task Get()
+		{
+			await SqlPipe.Sql("select * from [dbo].[Users] FOR JSON PATH").Stream(Response.Body, "['No Results Found']");
 		}
 
 		// GET: api/user/<username>
@@ -51,12 +51,13 @@ namespace GoGoBackend.Controllers
 
 		// POST: api/user
 		// initializing a new user
-		[HttpPost]
+		[HttpPost("new")]
 		public async Task<string> PostAsync()
 		{
 			string password = Request.Form["password"];
 			string username = Request.Form["username"];
 			string email = Request.Form["email"];
+			string ethAddress = Request.Form["ethAddress"];
 
 			SqlCommand cmd;
 
@@ -138,8 +139,9 @@ namespace GoGoBackend.Controllers
 				passwordHash = md5Hash.ComputeHash((username.ToLower() + password).Select(c => (byte)c).ToArray());
 				// create a semi-random validation string
 				// TODO: make it actually (securely) random
+				// or whatever. ndb
 				Random r = new Random();
-				validationString = md5Hash.ComputeHash(( username + password + System.DateTime.Now.ToString("dd-MM-yyyy HH:mm:ss") +
+				validationString = md5Hash.ComputeHash((username + password + System.DateTime.Now.ToString("dd-MM-yyyy HH:mm:ss") +
 					r.NextDouble().ToString()).Select(c => (byte)c).ToArray()).ToHexString();
 			}
 
@@ -147,11 +149,13 @@ namespace GoGoBackend.Controllers
 			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
 			{
 				connection.Open();
-				string sql = "INSERT INTO [dbo].[Users] (Username,PasswordHash,Email,Validation_String) VALUES(@username,@passwordHash,@email,@validationString)";
+				string sql = "INSERT INTO [dbo].[Users] (username,passwordHash,email,ethAddress,validation_String) " +
+							 "VALUES(@username,@passwordHash,@email,@ethAddress,@validationString)";
 				cmd = new SqlCommand(sql, connection);
 				cmd.Parameters.AddWithValue("@username", username);
 				cmd.Parameters.AddWithValue("@passwordHash", passwordHash);
 				cmd.Parameters.AddWithValue("@email", email);
+				cmd.Parameters.AddWithValue("@ethAddress", ethAddress);
 				cmd.Parameters.AddWithValue("@validationString", validationString);
 				cmd.ExecuteNonQuery();
 			}
@@ -163,12 +167,44 @@ namespace GoGoBackend.Controllers
 			return "registered.  please check your email for a confirmation link, then press \"back\" to log in.";
 		}
 
-		// POST: api/user/username
-		// this is a login attempt
-		[HttpPost("{username}")]
-		public string ValidatePassword(string username)
+		[HttpPost("options/{username}")]
+		public string SetOptions (string username)
 		{
 			string password = Request.Form["password"];
+			string newPassword = Request.Form["newPassword"];
+			string ethAddress = Request.Form["ethAddress"];
+			string notifications = Request.Form["notifications"];
+
+			// check password
+			if (!ValidatePassword(username, password, out string message))
+			{
+				return message;
+			}
+
+			// hash new password, if applicable
+			byte[] passwordHash = (newPassword != "")
+				? HashPassword(username, newPassword)
+				: HashPassword(username, password);
+
+			// alter user options in database
+			SqlCommand cmd;
+			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			{
+				connection.Open();
+				string sql = "UPDATE [dbo].[Users] set emailNotifications = @emailNotifications, passwordHash = @passwordHash, ethAddress = @ethAddress " +
+					"where username = @username";
+				cmd = new SqlCommand(sql, connection);
+				cmd.Parameters.AddWithValue("@username", username);
+				cmd.Parameters.AddWithValue("@passwordHash", passwordHash);
+				cmd.Parameters.AddWithValue("@emailNotifications", notifications);
+				cmd.Parameters.AddWithValue("@ethAddress", ethAddress);
+				cmd.ExecuteNonQuery();
+			}
+			return "success";
+		}
+
+		private byte[] HashPassword (string username, string password)
+		{
 			// hash the provided password
 			byte[] passwordHash;
 			using (MD5 md5Hash = MD5.Create())
@@ -176,9 +212,15 @@ namespace GoGoBackend.Controllers
 				// get password hash salted with username
 				passwordHash = md5Hash.ComputeHash((username.ToLower() + password).Select(c => (byte)c).ToArray());
 			}
+			return passwordHash;
+		}
+
+		public bool ValidatePassword(string username, string password, out string message)
+		{
 
 			// check the password hash with the specified username
 			byte[] passcheck = new byte[16];
+			byte[] passwordHash = HashPassword(username, password);
 			bool validated = false;
 			bool foundUser = false;
 			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
@@ -206,23 +248,49 @@ namespace GoGoBackend.Controllers
 			// does this user exist?
 			if (!foundUser)
 			{
-				return "user not found. register new?  ------>";
+				message = "user not found. register new?  ------>";
+				return false;
 			}
 			// have they confirmed via email?
 			else if (!validated)
 			{
-				return "user registered but not confirmed.  please use the confirmation link that was emailed to you.";
+				message = "user registered but not confirmed.  please use the confirmation link that was emailed to you.";
+				return false;
 			}
 			// is the password valid??
+			else if (password == "")
+			{
+				message = "please enter your password.";
+				return false;
+			}
 			// supposedly this comparison method is quite slow, but I don't think I care
 			else if (!passwordHash.SequenceEqual(passcheck))
 			{
-				return "wrong password";
+				message = "wrong password.";
+				return false;
+			}
+			else
+			{
+				message = "success";
+				return true;
+			}
+		}
+
+		// POST: api/user/username
+		// this is a login attempt
+		[HttpPost("login/{username}")]
+		public string Login(string username)
+		{
+			string password = Request.Form["password"];
+			if (!ValidatePassword(username, password, out string message))
+			{
+				// wrong password, or some problem with the registration
+				return message;
 			}
 			// passed all the checks, you can log in now
 			else
 			{
-				// TODO: return an auth token
+				// return an auth token
 				byte[] authToken;
 				byte[] authCodeHash;
 				using (MD5 md5Hash = MD5.Create())
@@ -273,7 +341,7 @@ namespace GoGoBackend.Controllers
 			}
 		}
 
-		[HttpGet("{username}/{validID}")]
+		[HttpGet("validate/{username}/{validID}")]
 		// GET: api/user/<username>/<validation_code>
 		// user clicked link from validation email
 		public async Task<string> ValidateUserLink(string username, string validID)

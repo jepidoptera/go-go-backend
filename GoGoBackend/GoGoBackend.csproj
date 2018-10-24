@@ -10,11 +10,24 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Belgrade.Sql.Client" Version="1.1.2" />
+    <PackageReference Include="Belgrade.Sql.Client" Version="1.1.4" />
     <PackageReference Include="Microsoft.AspNetCore.All" Version="2.0.8" />
-    <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="2.0.3" />
+    <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="2.1.5" />
+    <PackageReference Include="MSTest.TestFramework" Version="1.3.2" />
+    <PackageReference Include="Nethereum.Accounts" Version="2.5.1" />
+    <PackageReference Include="Nethereum.Contracts" Version="2.5.1" />
+    <PackageReference Include="Nethereum.Geth" Version="2.5.1" />
+    <PackageReference Include="Nethereum.HdWallet" Version="2.5.1" />
+    <PackageReference Include="Nethereum.JsonRpc.RpcClient" Version="3.0.0-rc1" />
+    <PackageReference Include="Nethereum.RLP" Version="2.5.1" />
+    <PackageReference Include="Nethereum.RPC" Version="2.5.1" />
+    <PackageReference Include="Nethereum.Signer" Version="2.5.1" />
+    <PackageReference Include="Nethereum.TestRPCRunner" Version="1.0.0" />
+    <PackageReference Include="Nethereum.TestRPCRunner.Net45" Version="1.0.0" />
+    <PackageReference Include="Nethereum.Util" Version="2.5.1" />
+    <PackageReference Include="Nethereum.Web3" Version="2.5.1" />
     <PackageReference Include="Newtonsoft.Json" Version="11.0.2" />
-    <PackageReference Include="Sendgrid" Version="9.9.0" />
+    <PackageReference Include="Sendgrid" Version="9.10.0" />
   </ItemGroup>
 
   <ItemGroup>
