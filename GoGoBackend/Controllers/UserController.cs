@@ -32,7 +32,7 @@ namespace GoGoBackend.Controllers
 		// GET: api/user
 		// gets all data about all users
 		// probably disable this method in production
-		[HttpGet]
+        [HttpGet("{all}")]
         public async Task Get()
         {
 			await SqlPipe.Sql("select * from [dbo].[Users] FOR JSON PATH").Stream(Response.Body, "['No Results Found']"); 
@@ -49,9 +49,9 @@ namespace GoGoBackend.Controllers
 			await SqlPipe.Sql(cmd).Stream(Response.Body, "{}");
 		}
 
-		// POST: api/user
+		// POST: api/user/new
 		// initializing a new user
-		[HttpPost]
+        [HttpPost("{new}")]
 		public async Task<string> PostAsync()
 		{
 			string password = Request.Form["password"];
@@ -157,70 +157,86 @@ namespace GoGoBackend.Controllers
 			}
 
 			// validation email
-			await Emails.Server.SendValidationMail(email, String.Format("{0}/api/user/{1}/{2}", Startup.apiServer, username, validationString));
+			await Emails.Server.SendValidationMail(email, String.Format("{0}/api/user/validate/{1}/{2}", Startup.apiServer, username, validationString));
 			// await Emails.Server.SendValidationMail(email, String.Format("https://{0}/api/user/{1}/{2}", "http://localhost:56533", username, validationString));
 
 			return "registered.  please check your email for a confirmation link, then press \"back\" to log in.";
 		}
 
-		// POST: api/user/username
-		// this is a login attempt
-		[HttpPost("{username}")]
-		public string ValidatePassword(string username)
-		{
-			string password = Request.Form["password"];
-			// hash the provided password
-			byte[] passwordHash;
-			using (MD5 md5Hash = MD5.Create())
-			{
-				// get password hash salted with username
-				passwordHash = md5Hash.ComputeHash((username.ToLower() + password).Select(c => (byte)c).ToArray());
-			}
+        public bool ValidatePassword(string username, string password, out string message)
+        {
+            // hash the provided password
+            byte[] passwordHash;
+            using (MD5 md5Hash = MD5.Create())
+            {
+                // get password hash salted with username
+                passwordHash = md5Hash.ComputeHash((username.ToLower() + password).Select(c => (byte)c).ToArray());
+            }
 
-			// check the password hash with the specified username
-			byte[] passcheck = new byte[16];
-			bool validated = false;
-			bool foundUser = false;
-			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
-			{
-				var cmd = new SqlCommand("select PasswordHash, Validated from [dbo].[Users] where username = @id", connection);
-				cmd.Parameters.AddWithValue("@id", username);
-				connection.Open();
-				// Get the password hash of any user with this name
-				SqlDataReader reader = cmd.ExecuteReader();
-				try
-				{
-					while (reader.Read())
-					{
-						passcheck = (byte[])reader["PasswordHash"];
-						validated = (bool)reader["Validated"];
-						foundUser = true;
-					}
-				}
-				finally
-				{
-					// Always call Close when done reading.
-					reader.Close();
-				}
-			}
-			// does this user exist?
-			if (!foundUser)
-			{
-				return "user not found. register new?  ------>";
-			}
-			// have they confirmed via email?
-			else if (!validated)
-			{
-				return "user registered but not confirmed.  please use the confirmation link that was emailed to you.";
-			}
-			// is the password valid??
-			// supposedly this comparison method is quite slow, but I don't think I care
-			else if (!passwordHash.SequenceEqual(passcheck))
-			{
-				return "wrong password";
-			}
+            // check the password hash with the specified username
+            byte[] passcheck = new byte[16];
+            bool validated = false;
+            bool foundUser = false;
+            using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+            {
+                var cmd = new SqlCommand("select PasswordHash, Validated from [dbo].[Users] where username = @id", connection);
+                cmd.Parameters.AddWithValue("@id", username);
+                connection.Open();
+                // Get the password hash of any user with this name
+                SqlDataReader reader = cmd.ExecuteReader();
+                try
+                {
+                    while (reader.Read())
+                    {
+                        passcheck = (byte[])reader["PasswordHash"];
+                        validated = (bool)reader["Validated"];
+                        foundUser = true;
+                    }
+                }
+                finally
+                {
+                    // Always call Close when done reading.
+                    reader.Close();
+                }
+            }
+            // does this user exist?
+            if (!foundUser)
+            {
+                message = "user not found. register new?  ------>";
+                return false;
+            }
+            // have they confirmed via email?
+            else if (!validated)
+            {
+                message = "user registered but not confirmed.  please use the confirmation link that was emailed to you.";
+                return false;
+            }
+            // is the password valid??
+            // supposedly this comparison method is quite slow, but I don't think I care
+            else if (!passwordHash.SequenceEqual(passcheck))
+            {
+                message = "wrong password";
+                return false;
+            }
+            else 
+            {
+                message = "success";
+                return true;
+            }
+        }
+
+        // POST: api/user/username
+        // this is a login attempt
+        [HttpPost("login/{username}")]
+        public string Login(string username)
+        {
+            string password = Request.Form["password"];
 			// passed all the checks, you can log in now
-			else
+            if (!ValidatePassword(username, password, out string message))
+            {
+                return message;
+            }
+            else
 			{
 				// TODO: return an auth token
 				byte[] authToken;
@@ -273,7 +289,7 @@ namespace GoGoBackend.Controllers
 			}
 		}
 
-		[HttpGet("{username}/{validID}")]
+		[HttpGet("validate/{username}/{validID}")]
 		// GET: api/user/<username>/<validation_code>
 		// user clicked link from validation email
 		public async Task<string> ValidateUserLink(string username, string validID)
@@ -289,7 +305,7 @@ namespace GoGoBackend.Controllers
 				where Username = @username;", connection);
 				cmd.Parameters.AddWithValue("@username", username);
 				connection.Open();
-				// Get the password hash of any user with this name
+				// Get the validation code for this user
 				SqlDataReader reader = cmd.ExecuteReader();
 				try
 				{
@@ -325,16 +341,43 @@ namespace GoGoBackend.Controllers
 			// execute
 			await SqlCommand.Sql(cmd).Exec();
 
-			return "successfully registered";
+			return "Successfully registered.  You may now log in.";
 		}
 
-		[HttpPost("{username}/setnotifications")]
+        [HttpPost("options/{username}")]
+        public async Task<string> SetOptions(string username)
+        {
+            string password = Request.Form["password"];
+            string newpassword = Request.Form["newPassword"];
+            string ethAddress = Request.Form["ethAddress"];
+            bool notifications = Request.Form["notifications"] == true;
+
+            if (ValidatePassword(username, password, out string message))
+            {
+                // update all options
+                SetNotifications(username, notifications);
+
+                SqlCommand cmd = new SqlCommand(
+                    @"update [dbo].[Users] set password = @newPassword, ethAddress = @ethAddress where username = @username");
+                cmd.Parameters.AddWithValue("@username", username);
+                cmd.Parameters.AddWithValue("@newpassword", (newpassword != "") ? newpassword : password);
+                cmd.Parameters.AddWithValue("@ethAddress", ethAddress);
+                // execute
+                await SqlCommand.Sql(cmd).Exec();
+
+                return "success";
+            }
+            // password validation failed
+            return message;
+        }
+
+        [HttpPost("setnotifications/{username}")]
 		public void ActivateNotifications(string username)
 		{
 			SetNotifications(username, true);
 		}
 
-		[HttpPost("{username}/unsetnotifications")]
+        [HttpPost("setnotifications/{username}")]
 		public void DeactivateNotifications(string username)
 		{
 			SetNotifications(username, false);

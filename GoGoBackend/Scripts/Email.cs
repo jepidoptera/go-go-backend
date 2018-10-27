@@ -7,14 +7,13 @@ using System.ComponentModel;
 using SendGrid;
 using SendGrid.Helpers.Mail;
 using System.Net.Http;
-using System.Net.Mail;
 using Microsoft.Extensions.Configuration;
 
 namespace Emails
 {
 	public class Server
 	{
-		static bool mailSent = false;
+		// static bool mailSent = false;
 		const string smtpServer = "Smtp.gmail.com";
 		const string smtpAddress = "gogobackend@gmail.com";
 		const string smtpPassword = "cat!!a3%malomor10tta761,,";
