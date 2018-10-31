@@ -11,6 +11,7 @@ using System.Security.Cryptography;
 using StringManipulation;
 using GoGoBackend.Go;
 using System.Threading;
+using GoToken;
 
 namespace GoGoBackend.Controllers
 {
@@ -32,7 +33,7 @@ namespace GoGoBackend.Controllers
 		// GET: api/user
 		// gets all data about all users
 		// probably disable this method in production
-        [HttpGet("{all}")]
+        [HttpGet("all")]
         public async Task Get()
         {
 			await SqlPipe.Sql("select * from [dbo].[Users] FOR JSON PATH").Stream(Response.Body, "['No Results Found']"); 
@@ -40,7 +41,7 @@ namespace GoGoBackend.Controllers
 
 		// GET: api/user/<username>
 		// all information about a specific user
-		[HttpGet("{id}")]
+		[HttpGet("info/{id}")]
 		public async Task Get(string id)
 		{
 			var cmd = new SqlCommand("select * from [dbo].[Users] where username = @id FOR JSON PATH, WITHOUT_ARRAY_WRAPPER");
@@ -51,7 +52,7 @@ namespace GoGoBackend.Controllers
 
 		// POST: api/user/new
 		// initializing a new user
-        [HttpPost("{new}")]
+        [HttpPost("new")]
 		public async Task<string> PostAsync()
 		{
 			string password = Request.Form["password"];
@@ -238,7 +239,7 @@ namespace GoGoBackend.Controllers
             }
             else
 			{
-				// TODO: return an auth token
+				// return an auth token
 				byte[] authToken;
 				byte[] authCodeHash;
 				using (MD5 md5Hash = MD5.Create())
@@ -289,40 +290,55 @@ namespace GoGoBackend.Controllers
 			}
 		}
 
-		[HttpGet("validate/{username}/{validID}")]
+        // retrieve arbitrary fields relating to a particular user
+        public static string[] UserInfo (string username, params string [] fields)
+        {
+            string[] returnVal = new string[fields.Length];
+            string sql = string.Format("select {0} from [dbo].[Users] where username = @username", string.Join(", ", fields));
+            using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+            using (SqlCommand cmd = new SqlCommand(sql))
+            {
+                SqlDataReader reader = cmd.ExecuteReader();
+                if (reader.Read())
+                {
+                    // get data from this user
+                    for (int i = 0; i < fields.Length; i++)
+                    {
+                        returnVal[i] = (string)reader[fields[i]];
+                    }
+                }
+                else
+                {
+                    // no user found
+                    return null;
+                }
+            }
+            return returnVal;
+        }
+
+        // get a single field from a single user
+        public static string UserInfo(string username, string field)
+        {
+            return UserInfo(username, new string[1] { field })[0];
+        }
+
+        [HttpGet("tokenbalance/{username}")]
+        public async Task<string> TokenBalance(string username)
+        {
+            string userAddress = UserInfo(username, "ethAddress");
+            float result = await TokenController.GetBalance(userAddress);
+            return result.ToString();
+        }
+
+
+        [HttpGet("validate/{username}/{validID}")]
 		// GET: api/user/<username>/<validation_code>
 		// user clicked link from validation email
 		public async Task<string> ValidateUserLink(string username, string validID)
 		{
-			string validation_string = "";
-			bool foundUser = false;
-			SqlCommand cmd;
-			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
-			{
+			string validation_string = UserInfo(username, "validation_string");
 
-				cmd = new SqlCommand(
-					@"Select Validation_String from [dbo].[Users]
-				where Username = @username;", connection);
-				cmd.Parameters.AddWithValue("@username", username);
-				connection.Open();
-				// Get the validation code for this user
-				SqlDataReader reader = cmd.ExecuteReader();
-				try
-				{
-					while (reader.Read())
-					{
-						validation_string = (string)reader["Validation_String"];
-						foundUser = true;
-					}
-				}
-				finally
-				{
-					// Always call Close when done reading.
-					reader.Close();
-				}
-			}
-
-			if (!foundUser)
+			if (validation_string == null)
 			{
 				// failed
 				return "invalid user";
@@ -335,7 +351,7 @@ namespace GoGoBackend.Controllers
 
 			// username and validation code match... update database to show this user is registered
 
-			cmd = new SqlCommand(
+			SqlCommand cmd = new SqlCommand(
 				@"update [dbo].[Users] set Validated = 'true', Validation_String = '' where Username = @username");
 			cmd.Parameters.AddWithValue("@username", username);
 			// execute
@@ -354,6 +370,17 @@ namespace GoGoBackend.Controllers
 
             if (ValidatePassword(username, password, out string message))
             {
+                // don't let them choose a shitty password
+                // I mean, it can suck, but there are limits
+                if (newpassword == "password")
+                {
+                    return "come on, you can do better.";
+                }
+                else if (newpassword.Length < 8)
+                {
+                    return "please enter a password of at least 8 characters.";
+                }
+
                 // update all options
                 SetNotifications(username, notifications);
 
