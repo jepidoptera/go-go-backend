@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 using Belgrade.SqlClient;
 using Belgrade.SqlClient.SqlDb;
 using System.Data.SqlClient;
+using SecretKeys;
 
 namespace GoGoBackend
 {
@@ -18,9 +19,9 @@ namespace GoGoBackend
     {
 		public const string serverName = "gogobackend.database.windows.net";
 		public const string apiServer = "https://gogobackend.azurewebsites.net";
-		public const string ConnString = // "Server=" + serverName + ";Database=user_registry;User Id=Jepidoptera;Password=Gogopopterix-Billy";
+		public static readonly string ConnString = 
 		"Server=tcp:" + serverName + ",1433;Initial Catalog = user_registry; Persist Security Info=False;User ID = Jepidoptera; Password=" +
-			"Gogopopterix-Billy; MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout = 30;";
+			Secrets.key["databasePassword"] + "; MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout = 30;";
 
 	public Startup(IConfiguration configuration)
         {

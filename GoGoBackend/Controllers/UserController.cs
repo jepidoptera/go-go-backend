@@ -12,6 +12,7 @@ using StringManipulation;
 using GoGoBackend.Go;
 using System.Threading;
 using GoToken;
+using System.Data.SqlTypes;
 
 namespace GoGoBackend.Controllers
 {
@@ -41,11 +42,11 @@ namespace GoGoBackend.Controllers
 
 		// GET: api/user/<username>
 		// all information about a specific user
-		[HttpGet("info/{id}")]
-		public async Task Get(string id)
+		[HttpGet("info/{username}")]
+        public async Task Get(string username)
 		{
 			var cmd = new SqlCommand("select * from [dbo].[Users] where username = @id FOR JSON PATH, WITHOUT_ARRAY_WRAPPER");
-			cmd.Parameters.AddWithValue("id", id);
+			cmd.Parameters.AddWithValue("id", username);
 			// await SqlPipe.Stream(cmd, Response.Body, "{}");
 			await SqlPipe.Sql(cmd).Stream(Response.Body, "{}");
 		}
@@ -291,41 +292,45 @@ namespace GoGoBackend.Controllers
 		}
 
         // retrieve arbitrary fields relating to a particular user
-        public static string[] UserInfo (string username, params string [] fields)
+        public static T[] UserInfo<T> (string username, params string [] fields)
         {
-            string[] returnVal = new string[fields.Length];
+            T[] returnVal = new T[fields.Length];
             string sql = string.Format("select {0} from [dbo].[Users] where username = @username", string.Join(", ", fields));
             using (SqlConnection connection = new SqlConnection(Startup.ConnString))
-            using (SqlCommand cmd = new SqlCommand(sql))
+            using (SqlCommand cmd = new SqlCommand(sql, connection))
             {
+                connection.Open();
+                cmd.Parameters.AddWithValue("@username", username);
                 SqlDataReader reader = cmd.ExecuteReader();
                 if (reader.Read())
                 {
                     // get data from this user
                     for (int i = 0; i < fields.Length; i++)
                     {
-                        returnVal[i] = (string)reader[fields[i]];
+                        if (!(reader[fields[i]] is DBNull))
+                            returnVal[i] = (T)reader[fields[i]];
                     }
                 }
                 else
                 {
                     // no user found
-                    return null;
+                    returnVal = null;
                 }
+                connection.Close();
             }
             return returnVal;
         }
 
         // get a single field from a single user
-        public static string UserInfo(string username, string field)
+        public static T UserInfo<T>(string username, string field)
         {
-            return UserInfo(username, new string[1] { field })[0];
+            return UserInfo<T>(username, new string[1] { field })[0];
         }
 
         [HttpGet("tokenbalance/{username}")]
         public async Task<string> TokenBalance(string username)
         {
-            string userAddress = UserInfo(username, "ethAddress");
+            string userAddress = UserInfo<string>(username, "ethAddress");
             float result = await TokenController.GetBalance(userAddress);
             return result.ToString();
         }
@@ -336,7 +341,7 @@ namespace GoGoBackend.Controllers
 		// user clicked link from validation email
 		public async Task<string> ValidateUserLink(string username, string validID)
 		{
-			string validation_string = UserInfo(username, "validation_string");
+			string validation_string = UserInfo<String>(username, "validation_string");
 
 			if (validation_string == null)
 			{
@@ -467,10 +472,10 @@ namespace GoGoBackend.Controllers
 		}
 
 		// DELETE: api/user/username
-		[HttpDelete("{id}")]
-        public async Task Delete(string id)
+		[HttpDelete("{username}")]
+        public async Task Delete(string username)
         {
-			await DeleteUser(id);
+			await DeleteUser(username);
 		}
 
 		public async Task DeleteUser(string username)

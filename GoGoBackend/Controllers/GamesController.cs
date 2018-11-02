@@ -202,11 +202,11 @@ namespace GoGoBackend.Controllers
 				{
 					message = string.Format("{0} played at {1}, {2}. It is now {2}'s turn", currentPlayer, x, y, otherPlayer);
 				}
-				if (UserController.NotificationsOn(currentPlayer))
+				if (UserController.UserInfo<bool>(currentPlayer, "emailNotifications"))
 				{
 					UserController.SendEmailNotification(currentPlayer, message);
 				}
-				if (UserController.NotificationsOn(otherPlayer))
+				if (UserController.UserInfo<bool>(otherPlayer, "emailNotifications"))
 				{
 					UserController.SendEmailNotification(otherPlayer, message);
 				}
@@ -216,19 +216,19 @@ namespace GoGoBackend.Controllers
 			if (game.over)
 			{
                 // if so, end it and reward tokens to players
-                // TODO: reward with erc20 tokens
+                // reward with erc20 tokens
                 // award 100 per game, split according to score
                 // figure out how many go to each player
                 int splitPercentage = Math.Min(50 + (int)(50 * Math.Abs(game.blackScore - game.whiteScore) * 2f / game.NodeCount), 99);
                 int player1Reward = (game.blackScore > game.whiteScore) ? splitPercentage : 100 - splitPercentage;
                 int player2Reward = 100 - player1Reward;
 
-                string player1Address = UserController.UserInfo(game.player1, "ethAddress");
-                string player2Address = UserController.UserInfo(game.player2, "ethAddress");
+                string player1Address = UserController.UserInfo<string>(game.player1, "ethAddress");
+                string player2Address = UserController.UserInfo<string>(game.player2, "ethAddress");
 
                 // give players their reward
-                await TokenController.Send(player1Address, player1Reward);
-                await TokenController.Send(player2Address, player2Reward);
+                if (player1Address != null) await TokenController.Send(player1Address, player1Reward);
+                if (player1Address != null) await TokenController.Send(player2Address, player2Reward);
 
                 // return code 'game over'
                 return "0,0,200";
@@ -286,7 +286,7 @@ namespace GoGoBackend.Controllers
 		}
 
 		// return the node graph for this game as a json object
-		[HttpGet("{gameID}/nodes")]
+		[HttpGet("nodes/{gameID}")]
 		public string Nodes(string gameID)
 		{
 			if (!activeGames.ContainsKey(gameID))
@@ -303,17 +303,17 @@ namespace GoGoBackend.Controllers
 		}
 
 		// return an array describing the state of each node
-		[HttpGet("{gameID}/state")]
+		[HttpGet("state/{gameID}")]
 		public string GameState(string gameID)
 		{
 			//// activate this game if need be
-			//if (!activeGames.ContainsKey(gameID))
-			//{
+			if (!activeGames.ContainsKey(gameID))
+			{
 				if (!ActivateGame(gameID))
 				{
 					return "none";
 				}
-			//}
+			}
 			// get state
 			int[] nodes = activeGames[gameID].GameState();
 			string returnVal = string.Join(',', nodes);
