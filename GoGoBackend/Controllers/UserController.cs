@@ -33,16 +33,35 @@ namespace GoGoBackend.Controllers
 		
 		// GET: api/user
 		// gets all data about all users
-		// probably disable this method in production
         [HttpGet("all")]
         public async Task Get()
         {
 			await SqlPipe.Sql("select * from [dbo].[Users] FOR JSON PATH").Stream(Response.Body, "['No Results Found']"); 
 		}
 
-		// GET: api/user/<username>
-		// all information about a specific user
-		[HttpGet("info/{username}")]
+        // GET: api/user
+        // gets all data about all users
+        [HttpGet("names/all")]
+        public string GetNames()
+        {
+            List<string> results = new List<string>();
+            string sql = "select username from[dbo].[Users]";
+            using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+            using (SqlCommand cmd = new SqlCommand(sql, connection))
+            {
+                connection.Open();
+                SqlDataReader reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    results.Add((string)reader["username"]);
+                }
+            }
+            return string.Join(",", results);
+        }
+
+        // GET: api/user/<username>
+        // all information about a specific user
+        [HttpGet("info/{username}")]
         public async Task Get(string username)
 		{
 			var cmd = new SqlCommand("select * from [dbo].[Users] where username = @id FOR JSON PATH, WITHOUT_ARRAY_WRAPPER");
@@ -62,15 +81,19 @@ namespace GoGoBackend.Controllers
 
 			SqlCommand cmd;
 
-			// make sure all parameters are valid
-			if (!Emails.Server.VerifyEmailAddress(email))
-			{
-				return "invalid email address";
-			}
-			else if (username == "")
-			{
-				return "invalid username";
-			}
+            // make sure all parameters are valid
+            if (!Emails.Server.VerifyEmailAddress(email))
+            {
+                return "invalid email address";
+            }
+            else if (username == "")
+            {
+                return "invalid username";
+            }
+            else if (username.Contains(',') || username.Contains(' '))
+            {
+                return "username may not contain spaces or commas";
+            }
 			else if (password == "")
 			{
 				return "invalid password";
