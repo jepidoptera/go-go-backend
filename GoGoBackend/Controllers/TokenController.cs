@@ -46,10 +46,10 @@ namespace GoGoBackend.Controllers
 			}
 
 			// generate a new account key
-			// string privateKey = await Token.GenerateKey();
+			string privateKey = await Token.GenerateKey();
 
 			// deploy the token contract
-			string contractAddress = await Token.DeployContractAsync(out string privateKey);
+			string contractAddress = await Token.DeployContractAsync(privateKey);
 
 			if (contractAddress.Length != 40) return contractAddress;
 
