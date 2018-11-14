@@ -12,6 +12,7 @@ using System.Threading;
 using System.Collections;
 using GoGoBackend.Go;
 using Newtonsoft.Json;
+using GoToken;
 
 namespace GoGoBackend.Controllers
 {
@@ -36,59 +37,49 @@ namespace GoGoBackend.Controllers
 
 		// GET: api/games/open
 		[HttpGet("open")]
-		public async Task ListOpenGames(bool filterOpen = true)
+        public async Task ListGames(string filter = "open", string playerID = "")
 		{
-			// return a comma-separated list of all open games
-			// todo: allow filtering / string matching by host name
-			if (filterOpen)
+            // return a comma-separated list of games
+            // after applying whatever filters
+            string sql;
+            if (filter == "open")
+                sql = "select * from [dbo].[ActiveGames] WHERE (player2 is null or player2 = '') " +
+                    "and player1LastMove > DATEADD(ss, -5, GetUtcDate()) FOR JSON PATH";
+            else if (filter == "ongoing")
+                sql = "select * from [dbo].[ActiveGames] WHERE (player2 = @playerID or player1 = @playerID and player2 is not null) FOR JSON PATH";
+            else if (filter == "challenge")
+                sql = "select * from [dbo].[ActiveGames] WHERE (player2 = @playerID and history is null) FOR JSON PATH";
+            else
+                sql = "select * from [dbo].[ActiveGames] FOR JSON PATH";
+
+            // query the result
+            using (SqlConnection connection = new SqlConnection(Startup.ConnString))
 			{
-				using (SqlConnection connection = new SqlConnection(Startup.ConnString))
-				{
-					string sql = "select * from [dbo].[ActiveGames] WHERE (player2 is null or player2 = '') " +
-						"and player1LastMove > DATEADD(ss, -5, GetUtcDate()) FOR JSON PATH";
-					SqlCommand cmd = new SqlCommand(sql, connection);
-					await SqlPipe.Sql(cmd).Stream(Response.Body, "[]");
-				}
-			}
-			else
-			{
-				await SqlPipe.Sql("select * from [dbo].[ActiveGames] FOR JSON PATH").Stream(Response.Body, "['No Results Found']");
+				SqlCommand cmd = new SqlCommand(sql, connection);
+                if (playerID != "") cmd.Parameters.AddWithValue("@playerID", playerID);
+                await SqlPipe.Sql(cmd).Stream(Response.Body, "[]");
 			}
 		}
 
-		// GET: api/games/ongoing/{playerID}
+		// GET: api/games/open
 		[HttpGet("ongoing/{playerID}")]
 		public async Task ListOngoingGames(string playerID)
 		{
-			// return a comma-separated list of all games this player is currently involved in
-			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
-			{
-				string sql = "select * from [dbo].[ActiveGames] WHERE (player2 = @playerID or player1 = @playerID and player2 is not null) FOR JSON PATH";
-				SqlCommand cmd = new SqlCommand(sql, connection);
-				cmd.Parameters.AddWithValue("@playerID", playerID);
-				await SqlPipe.Sql(cmd).Stream(Response.Body, "[]");
-			}
-		}
+            await ListGames(filter: "ongoing", playerID: playerID);
+        }
 
-		// GET: api/games/challenge/{playerID}
-		[HttpGet("challenge/{playerID}")]
-		public async Task ListChallengeGames(string playerID)
-		{
-			// return a comma-separated list of challenges issued to this player
-			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
-			{
-				string sql = "select * from [dbo].[ActiveGames] WHERE (player2 = @playerID AND history IS NULL) FOR JSON PATH";
-				SqlCommand cmd = new SqlCommand(sql, connection);
-				cmd.Parameters.AddWithValue("@playerID", playerID);
-				await SqlPipe.Sql(cmd).Stream(Response.Body, "[]");
-			}
-		}
+        // GET: api/games/challenges
+        [HttpGet("challenges/{playerID}")]
+        public async Task ListChallengeGames(string playerID)
+        {
+            await ListGames(filter: "challenge", playerID: playerID);
+        }
 
-		// GET: api/games/all
-		[HttpGet("all")]
+        // GET: api/games/all
+        [HttpGet("all")]
 		public async Task ListAllGames()
 		{
-			await ListOpenGames(filterOpen: false);
+            await ListGames(filter: "all");
 		}
 
 		// GET: api/games/new
@@ -131,6 +122,9 @@ namespace GoGoBackend.Controllers
 				cmd.ExecuteNonQuery();
 			}
 
+			// create a new active game
+			new Game(player1, player2, boardSize, mode, gameID);
+
 			return gameID;
 		}
 
@@ -155,7 +149,7 @@ namespace GoGoBackend.Controllers
 				return "auth token invalid";
 			}
 
-			// is this game already active ?
+			// is this game already active?
 			if (!activeGames.ContainsKey(gameID))
 			{
 				// no? better activate it
@@ -166,22 +160,6 @@ namespace GoGoBackend.Controllers
 				}
 			}
 			game = activeGames[gameID];
-
-			// is this move valid? (no playing on other player's turn or sending "game over" opcode)
-			if (!new List<int>() { 0, 1, 2, 255 }.Contains(opCode))
-			{
-				return "invalid opcode.";
-			}
-			if (currentPlayer == game.player1 && opCode == 2 ||
-				currentPlayer == game.player2 && opCode == 1)
-			{
-				return "wait your turn.";
-			}
-			// is this player even in this game??
-			if (currentPlayer != game.player1 && currentPlayer != game.player2)
-			{
-				return "this is not your game.";
-			}
 
 			// add the move to the active game object
 			game.MakeMove(x, y, opCode);
@@ -196,7 +174,7 @@ namespace GoGoBackend.Controllers
 					string sql = "UPDATE [dbo].[ActiveGames] SET history = @history WHERE Id = @gameID";
 					cmd = new SqlCommand(sql, connection);
 					cmd.Parameters.AddWithValue("@gameID", gameID);
-					cmd.Parameters.AddWithValue("@history", game.moveHistory.ToArray());
+					cmd.Parameters.AddWithValue("@history", game.history.ToArray());
 					// cmd.Parameters.AddWithValue("@datetime", System.DateTime.Now); //.ToString(dateTimeString));
 					cmd.ExecuteNonQuery();
 				}
@@ -224,11 +202,11 @@ namespace GoGoBackend.Controllers
 				{
 					message = string.Format("{0} played at {1}, {2}. It is now {2}'s turn", currentPlayer, x, y, otherPlayer);
 				}
-				if (UserController.NotificationsOn(currentPlayer))
+				if (UserController.UserInfo<bool>(currentPlayer, "emailNotifications"))
 				{
 					UserController.SendEmailNotification(currentPlayer, message);
 				}
-				if (UserController.NotificationsOn(otherPlayer))
+				if (UserController.UserInfo<bool>(otherPlayer, "emailNotifications"))
 				{
 					UserController.SendEmailNotification(otherPlayer, message);
 				}
@@ -237,9 +215,23 @@ namespace GoGoBackend.Controllers
 			// is this end of game?
 			if (game.over)
 			{
-				// if so, end it and reward tokens to players
-				// TODO: reward erc20 tokens
-				return "0,0,200";
+                // if so, end it and reward tokens to players
+                // reward with erc20 tokens
+                // award 100 per game, split according to score
+                // figure out how many go to each player
+                int splitPercentage = Math.Min(50 + (int)(50 * Math.Abs(game.blackScore - game.whiteScore) * 2f / game.NodeCount), 99);
+                int player1Reward = (game.blackScore > game.whiteScore) ? splitPercentage : 100 - splitPercentage;
+                int player2Reward = 100 - player1Reward;
+
+                string player1Address = UserController.UserInfo<string>(game.player1, "ethAddress");
+                string player2Address = UserController.UserInfo<string>(game.player2, "ethAddress");
+
+                // give players their reward
+                if (player1Address != null) await TokenController.Send(player1Address, player1Reward);
+                if (player1Address != null) await TokenController.Send(player2Address, player2Reward);
+
+                // return code 'game over'
+                return "0,0,200";
 			}
 			else
 			{
@@ -314,7 +306,7 @@ namespace GoGoBackend.Controllers
 		[HttpGet("state/{gameID}")]
 		public string GameState(string gameID)
 		{
-			// activate this game if need be
+			//// activate this game if need be
 			if (!activeGames.ContainsKey(gameID))
 			{
 				if (!ActivateGame(gameID))
@@ -342,7 +334,7 @@ namespace GoGoBackend.Controllers
 				// cmd.Parameters.AddWithValue("@datetime", System.DateTime.Now); // .ToString(dateTimeString));
 				cmd.ExecuteNonQuery();
 
-				sql = "UPDATE [dbo].[ActiveGames] SET player2LastMove = GetUTCDate() WHERE player2 = @playerID";
+				sql = "UPDATE [dbo].[ActiveGames] SET player2LastMove = GetUTCDate() WHERE player2 = @playerID and player2LastMove is not null";
 				cmd = new SqlCommand(sql, connection);
 				cmd.Parameters.AddWithValue("@playerID", playerID);
 				// cmd.Parameters.AddWithValue("@datetime", System.DateTime.Now); //.ToString(dateTimeString));
@@ -369,7 +361,7 @@ namespace GoGoBackend.Controllers
 			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
 			{
 				connection.Open();
-				string sql = "UPDATE [dbo].[ActiveGames] SET player2 = @playerID WHERE Id = @gameID";
+                string sql = "UPDATE [dbo].[ActiveGames] SET player2 = @playerID, player2LastMove = GetUTCDate() WHERE Id = @gameID";
 				cmd = new SqlCommand(sql, connection);
 				cmd.Parameters.AddWithValue("@playerID", playerID);
 				cmd.Parameters.AddWithValue("@gameID", gameID);

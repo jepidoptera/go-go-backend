@@ -28,11 +28,13 @@ namespace GoGoBackend.Go
 		}
 
 		public string player1, player2;
-		public List<byte> moveHistory;
+		public List<byte> history;
 		public int gameMode;
 		public int boardSize;
 		public bool over = false;
 		private Node[] gameState;
+        public int blackStonesCaptured = 0;
+        public int whiteStonesCaptured = 0;
 		public int whiteScore = 0;
 		public int blackScore = 0;
 
@@ -49,7 +51,9 @@ namespace GoGoBackend.Go
 
 		public static Dictionary<string, Game> activeGames = new Dictionary<string, Game>();
 
-		// constructor overloads - with or without history
+        public int NodeCount { get { return gameState.Length; } }
+
+        // constructor overloads - with or without history
 		public Game(string user1, string user2, int boardSize, int gameMode, string key)
 		{
 			Initialize(user1, user2, boardSize, gameMode, key, new List<byte>());
@@ -61,9 +65,9 @@ namespace GoGoBackend.Go
 		}
 
 		// take arguments from either of the two constructor options
-		private void Initialize(string player1, string player2, int boardSize, int gameMode, string key, List<byte> history)
+		private void Initialize(string player1, string player2, int boardSize, int gameMode, string gameID, List<byte> history)
 		{
-			this.moveHistory = history;
+			this.history = history;
 			this.player1 = player1;
 			this.player2 = player2;
 			this.boardSize = boardSize;
@@ -71,7 +75,7 @@ namespace GoGoBackend.Go
 			this.gameState = BuildNodeGraph(gameMode, boardSize);
 			this.turn = 1;
 			if (history.Count > 0) PlayThrough(history, boardSize, gameMode);
-			activeGames[key] = this;
+			activeGames[gameID] = this;
 		}
 
 		public string AwaitMove()
@@ -101,9 +105,9 @@ namespace GoGoBackend.Go
 				if (TryPlayStone(LocationOf(x, y), opCode))
 				{
 					// success
-					moveHistory.Add(this.x);
-					moveHistory.Add(this.y);
-					moveHistory.Add(this.opCode);
+					history.Add(this.x);
+					history.Add(this.y);
+					history.Add(this.opCode);
 					// if game ends, return opcode 200
 					if (over)
 					{

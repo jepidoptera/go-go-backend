@@ -8,15 +8,17 @@ using SendGrid;
 using SendGrid.Helpers.Mail;
 using System.Net.Http;
 using Microsoft.Extensions.Configuration;
+using SecretKeys;
 
 namespace Emails
 {
 	public class Server
 	{
-		static bool mailSent = false;
+		// static bool mailSent = false;
 		const string smtpServer = "Smtp.gmail.com";
 		const string smtpAddress = "gogobackend@gmail.com";
-		const string smtpPassword = "cat!!a3%malomor10tta761,,";
+		static readonly string smtpPassword = Secrets.key["smtpPassword"];
+        static readonly string apiKey = Secrets.key["apiKey"];
 
 		public static async Task SendValidationMail(string recipient, string validationLink)
 		{
@@ -29,22 +31,8 @@ namespace Emails
 			var htmlContent = string.Format("<a href = \"{0}\" target = \"_blank\">Confirm Account</a>", validationLink);
 			var msg = MailHelper.CreateSingleEmail(from, to, subject, plainTextContent, htmlContent);
 
-			//msg.SetFrom(new EmailAddress("dx@example.com", "SendGrid DX Team"));
-
-			//msg.AddTo(recipient);
-
-			//msg.SetSubject("New account confirmation");
-
-			//msg.AddContent(MimeType.Text, "Please click the following link to confirm your account.");
-			//msg.AddContent(MimeType.Text, validationLink);
-
-			var apiKey = System.Environment.GetEnvironmentVariable("SENDGRID_API_KEY");
-			// this is definitely not how this is supposed to be done
-			// TODO: puzzle through documentation on azure key vaults
-			// or web config settings, or something better than this.
-			apiKey = "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";
 			var client = new SendGridClient(apiKey);
-			// send the damn email. clearly, the most important part.
+			// send the damn email.
 			var response = await client.SendEmailAsync(msg);
 
 			return;
@@ -59,13 +47,8 @@ namespace Emails
 			var plainTextContent = message;
 			var msg = MailHelper.CreateSingleEmail(from, to, subject, message, "");
 
-			var apiKey = System.Environment.GetEnvironmentVariable("SENDGRID_API_KEY");
-			// this is definitely not how this is supposed to be done
-			// TODO: puzzle through documentation on azure key vaults
-			// or web config settings, or something better than this.
-			apiKey = "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";
 			var client = new SendGridClient(apiKey);
-			// send the damn email. clearly, the most important part.
+			// send the email
 			var response = client.SendEmailAsync(msg);
 
 			return;
