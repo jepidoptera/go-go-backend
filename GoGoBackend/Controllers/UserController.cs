@@ -497,14 +497,52 @@ namespace GoGoBackend.Controllers
 			Emails.Server.SendNotificationEmail(email, message);
 		}
 
-		public Go.Player ActivatePlayer(string playerID)
-		{
-			if (Player.players.ContainsKey(playerID)) return Player.players[playerID];
-			// otherwise, create the player object from database info
-		}
+        // GET: api/user/ping/{playerID}
+        [HttpGet("ping/{playerID}")]
+        public string Ping(string playerID)
+        {
+            Player player = ActivatePlayer(playerID);
+            if (player == null) return null;
+            player.Ping();
+            return "ping";
+        }
 
-		// DELETE: api/user/username
-		[HttpDelete("{username}")]
+        public static Player ActivatePlayer(string playerID)
+		{
+			// if player already exists in memory, return immediately
+            if (Player.players.ContainsKey(playerID)) return Player.players[playerID];
+
+            // otherwise, create the player object from database info
+            string emailAddress = "", ethAddress = "";
+            int gamesPlayed = 0, gamesWon = 0;
+
+            // query database
+            string sql = "Select * from [dbo].[Users] where username = @playerID";
+            using (SqlConnection dbConnection = new SqlConnection(Startup.ConnString))
+            using (SqlCommand dbCommand = new SqlCommand(sql, dbConnection))
+            {
+                dbCommand.Parameters.AddWithValue("@playerID", playerID);
+                dbConnection.Open();
+
+                SqlDataReader reader = dbCommand.ExecuteReader();
+
+                while (reader.Read())
+                {
+                    // get required fields
+                    emailAddress = (string)reader["emailAddress"];
+                    ethAddress = (string)reader["ethAddress"];
+                    gamesPlayed = (int)reader["gamesPlayed"];
+                    gamesWon = (int)reader["gamesWon"];
+                }
+                dbConnection.Close();
+            }
+            // generate player object and return
+            return new Player(playerID, emailAddress, ethAddress, gamesPlayed, gamesWon);
+            // success
+        }
+
+        // DELETE: api/user/username
+        [HttpDelete("{username}")]
         public async Task Delete(string username)
         {
 			await DeleteUser(username);

@@ -37,49 +37,61 @@ namespace GoGoBackend.Controllers
 
 		// GET: api/games/open
 		[HttpGet("open")]
-        public async Task ListGames(string filter = "open", string playerID = "")
+        public string ListGames(string filter = "open", string playerID = "")
 		{
             // return a comma-separated list of games
             // after applying whatever filters
+            List<Game> resultGames = new List<Game>();
             string sql;
             if (filter == "open")
-                sql = "select * from [dbo].[ActiveGames] WHERE player2 is null";
+                sql = "select Id from [dbo].[ActiveGames] WHERE player2 is null";
             else if (filter == "ongoing")
-                sql = "select * from [dbo].[ActiveGames] WHERE gameover = 0 and history is not null and " +
-					"(player2 = @playerID or player1 = @playerID and player2 is not null) FOR JSON PATH";
+                sql = "select Id from [dbo].[ActiveGames] WHERE gameover = 0 and history is not null and " +
+					"(player2 = @playerID or player1 = @playerID and player2 is not null)";
             else if (filter == "challenge")
-                sql = "select * from [dbo].[ActiveGames] WHERE (player2 = @playerID and history is null) FOR JSON PATH";
+                sql = "select Id from [dbo].[ActiveGames] WHERE (player2 = @playerID and history is null)";
             else
-                sql = "select * from [dbo].[ActiveGames] FOR JSON PATH";
+                sql = "select Id from [dbo].[ActiveGames]";
 
             // query the result
             using (SqlConnection connection = new SqlConnection(Startup.ConnString))
-			{
-				SqlCommand cmd = new SqlCommand(sql, connection);
-                if (playerID != "") cmd.Parameters.AddWithValue("@playerID", playerID);
-                await SqlPipe.Sql(cmd).Stream(Response.Body, "[]");
+            using (SqlCommand cmd = new SqlCommand(sql, connection))
+            {
+                connection.Open();
+                SqlDataReader reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    // retrieve Game object
+                    Game tGame = ActivateGame(reader.GetString(0));
+                    tGame.online = UserController.ActivatePlayer(tGame.player1).IsOnline();
+                    resultGames.Add(tGame);
+                }
+                // return json string listing relevant games.
+                // unfortunately this adds a stupid number of escape characters which I can't figure out how to get rid of
+                // has to be cleaned up on the other end
+                return JsonConvert.SerializeObject(resultGames);
 			}
 		}
 
 		// GET: api/games/open
 		[HttpGet("ongoing/{playerID}")]
-		public async Task ListOngoingGames(string playerID)
+		public string ListOngoingGames(string playerID)
 		{
-            await ListGames(filter: "ongoing", playerID: playerID);
+            return ListGames(filter: "ongoing", playerID: playerID);
         }
 
         // GET: api/games/challenges
         [HttpGet("challenges/{playerID}")]
-        public async Task ListChallengeGames(string playerID)
+        public string ListChallengeGames(string playerID)
         {
-            await ListGames(filter: "challenge", playerID: playerID);
+            return ListGames(filter: "challenge", playerID: playerID);
         }
 
         // GET: api/games/all
         [HttpGet("all")]
-		public async Task ListAllGames()
+		public string ListAllGames()
 		{
-            await ListGames(filter: "all");
+            return ListGames(filter: "all");
 		}
 
 		// GET: api/games/new
@@ -149,22 +161,23 @@ namespace GoGoBackend.Controllers
 				return "auth token invalid";
 			}
 
-			// is this game already active?
-			if (!activeGames.ContainsKey(gameID))
+            game = ActivateGame(gameID);
+            if (game == null)
+            {
+                // doesn't exist
+                return "this game isn't real.";
+            }
+
+            // make sure this player is the one who's turn it is
+            if (game.currentPlayer != currentPlayer) 
 			{
-				// no? better activate it
-				if (!ActivateGame(gameID))
-				{
-					// doesn't exist
-					return "this game isn't real.";
-				}
+				return "quit trying to cheat.";
 			}
-			game = activeGames[gameID];
 
 			// add the move to the active game object
 			game.MakeMove(x, y, opCode);
 
-			if (opCode < 255)
+			if (opCode < (int)Game.Opcodes.ping)
 			{
 				// add to move history in the database
 				SqlCommand cmd;
@@ -213,7 +226,7 @@ namespace GoGoBackend.Controllers
 			}
 
 			// is this end of game?
-			if (game.over)
+			if (game.gameover)
 			{
                 // if so, end it and reward tokens to players
                 // reward with erc20 tokens
@@ -231,7 +244,7 @@ namespace GoGoBackend.Controllers
                 if (player1Address != null) await TokenController.Send(player2Address, player2Reward);
 
                 // return code 'game over'
-                return "0,0,200";
+                return string.Format("0,0,{0}", Game.Opcodes.gameover);
 			}
 			else
 			{
@@ -241,7 +254,7 @@ namespace GoGoBackend.Controllers
 			}
 		}
 
-		private bool ActivateGame(string gameID)
+		private Game ActivateGame(string gameID)
 		{
 			List<byte> history = new List<byte>();
 			string player1 = "", player2 = "";
@@ -269,10 +282,10 @@ namespace GoGoBackend.Controllers
 				dbConnection.Close();
 			}
 			// does this game even exist?? sanity check
-			if (player2 == "") return false;
+			if (player2 == "") return null;
 			// model it as an object with manual reset events and gamestate
-			new Game(player1, player2, boardSize, gameMode, gameID, history);
-			return true; // success
+			return new Game(player1, player2, boardSize, gameMode, gameID, history);
+			// success
 		}
 
 		// GET: api/games/{ID}
@@ -289,15 +302,13 @@ namespace GoGoBackend.Controllers
 		[HttpGet("nodes/{gameID}")]
 		public string Nodes(string gameID)
 		{
-			if (!activeGames.ContainsKey(gameID))
+            Game game = ActivateGame(gameID);
+            if (game == null)
 			{
-				if (!ActivateGame(gameID))
-				{
-					return "none";
-				}
+				return "none";
 			}
 			// return a json object containing this game's node map
-			Go.Game.SimpleNode[] nodes = activeGames[gameID].GetNodes();
+			Game.SimpleNode[] nodes = game.GetNodes();
 			string json = JsonConvert.SerializeObject(nodes);
 			return json;
 		}
@@ -306,42 +317,17 @@ namespace GoGoBackend.Controllers
 		[HttpGet("state/{gameID}")]
 		public string GameState(string gameID)
 		{
-			//// activate this game if need be
-			if (!activeGames.ContainsKey(gameID))
-			{
-				if (!ActivateGame(gameID))
-				{
-					return "none";
-				}
+            // activate this game if need be
+            Game game = ActivateGame(gameID);
+            if (game == null)
+            {
+				return "none";
 			}
+            
 			// get state
-			int[] nodes = activeGames[gameID].GameState();
+			int[] nodes = game.GameState();
 			string returnVal = string.Join(',', nodes);
 			return returnVal;
-		}
-
-		// GET: api/games/ping/{playerID}
-		[HttpGet("ping/{playerID}")]
-		public string Ping(string playerID)
-		{
-			SqlCommand cmd;
-			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
-			{
-				connection.Open();
-				string sql = "UPDATE [dbo].[ActiveGames] SET player1LastMove = GetUTCDate() WHERE player1 = @playerID";
-				cmd = new SqlCommand(sql, connection);
-				cmd.Parameters.AddWithValue("@playerID", playerID);
-				// cmd.Parameters.AddWithValue("@datetime", System.DateTime.Now); // .ToString(dateTimeString));
-				cmd.ExecuteNonQuery();
-
-				sql = "UPDATE [dbo].[ActiveGames] SET player2LastMove = GetUTCDate() WHERE player2 = @playerID and player2LastMove is not null";
-				cmd = new SqlCommand(sql, connection);
-				cmd.Parameters.AddWithValue("@playerID", playerID);
-				// cmd.Parameters.AddWithValue("@datetime", System.DateTime.Now); //.ToString(dateTimeString));
-				cmd.ExecuteNonQuery();
-			}
-
-			return "ping";
 		}
 
 		// POST: api/games/join/{gameID}
@@ -368,96 +354,100 @@ namespace GoGoBackend.Controllers
 				// cmd.Parameters.AddWithValue("@datetime", System.DateTime.Now); // .ToString(dateTimeString));
 				cmd.ExecuteNonQuery();
 			}
-			return "";
+
+            // update in-memory game object
+            Game game = ActivateGame(gameID);
+            game.player2 = playerID;
+			return "joined";
 		}
 
 		// POST: api/games/leave/{gameID}
 		[HttpPost("leave/{gameID}")]
 		public string LeaveGame(string gameID)
 		{
-			string playerID = Request.Form["playerID"];
-			string token = Request.Form["authtoken"];
+			//string playerID = Request.Form["playerID"];
+			//string token = Request.Form["authtoken"];
 
-			// auth token required for this action
-			if (!UserController.ValidateAuthToken(playerID, token))
-			{
-				return "auth token invalid";
-			}
+			//// auth token required for this action
+			//if (!UserController.ValidateAuthToken(playerID, token))
+			//{
+			//	return "auth token invalid";
+			//}
 
-			SqlCommand cmd;
-			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
-			{
-				connection.Open();
-				// leave the game - if this is player2 and no moves have been played yet
-				string sql = "UPDATE [dbo].[ActiveGames] SET player2 = '' WHERE Id = @gameID and player2 = @playerID and history is NULL";
-				cmd = new SqlCommand(sql, connection);
-				cmd.Parameters.AddWithValue("@playerID", playerID);
-				cmd.Parameters.AddWithValue("@gameID", gameID);
-				// cmd.Parameters.AddWithValue("@datetime", System.DateTime.Now); // .ToString(dateTimeString));
-				cmd.ExecuteNonQuery();
-				// leave the game as player1
-				sql = "UPDATE [dbo].[ActiveGames] SET player1 = '' WHERE Id = @gameID and player1 = @playerID and history is NULL";
-				cmd = new SqlCommand(sql, connection);
-				cmd.Parameters.AddWithValue("@playerID", playerID);
-				cmd.Parameters.AddWithValue("@gameID", gameID);
-				cmd.ExecuteNonQuery();
-			}
-			return "";
+			//SqlCommand cmd;
+			//using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			//{
+			//	connection.Open();
+			//	// leave the game - if this is player2 and no moves have been played yet
+			//	string sql = "UPDATE [dbo].[ActiveGames] SET player2 = '' WHERE Id = @gameID and player2 = @playerID and history is NULL";
+			//	cmd = new SqlCommand(sql, connection);
+			//	cmd.Parameters.AddWithValue("@playerID", playerID);
+			//	cmd.Parameters.AddWithValue("@gameID", gameID);
+			//	// cmd.Parameters.AddWithValue("@datetime", System.DateTime.Now); // .ToString(dateTimeString));
+			//	cmd.ExecuteNonQuery();
+			//	// leave the game as player1
+			//	sql = "UPDATE [dbo].[ActiveGames] SET player1 = '' WHERE Id = @gameID and player1 = @playerID and history is NULL";
+			//	cmd = new SqlCommand(sql, connection);
+			//	cmd.Parameters.AddWithValue("@playerID", playerID);
+			//	cmd.Parameters.AddWithValue("@gameID", gameID);
+			//	cmd.ExecuteNonQuery();
+			//}
+			return "api endpoint deprecated";
 		}
 
 		// checked ready button
 		[HttpPost("ready/{gameID}")]
 		public string SignalReady(string gameID)
 		{
-			string playerID = Request.Form["playerID"];
-			string token = Request.Form["authtoken"];
+			//string playerID = Request.Form["playerID"];
+			//string token = Request.Form["authtoken"];
 
-			// auth token required for this action
-			if (!UserController.ValidateAuthToken(playerID, token))
-			{
-				return "auth token invalid";
-			}
-			SetReadiness(gameID, playerID, 1, true);
-			SetReadiness(gameID, playerID, 2, true);
-			return "";
+			//// auth token required for this action
+			//if (!UserController.ValidateAuthToken(playerID, token))
+			//{
+			//	return "auth token invalid";
+			//}
+			//SetReadiness(gameID, playerID, 1, true);
+			//SetReadiness(gameID, playerID, 2, true);
+			return "api endpoint deprecated";
 		}
 
 		// un-checked ready button
 		[HttpPost("unready/{gameID}")]
 		public string SignalUnReady(string gameID)
 		{
-			string playerID = Request.Form["playerID"];
-			string token = Request.Form["authtoken"];
+			//string playerID = Request.Form["playerID"];
+			//string token = Request.Form["authtoken"];
 
-			// auth token required for this action
-			if (!UserController.ValidateAuthToken(playerID, token))
-			{
-				return "auth token invalid";
-			}
-			SetReadiness(gameID, playerID, 1, false);
-			SetReadiness(gameID, playerID, 2, false);
-			return "";
+			//// auth token required for this action
+			//if (!UserController.ValidateAuthToken(playerID, token))
+			//{
+			//	return "auth token invalid";
+			//}
+			//SetReadiness(gameID, playerID, 1, false);
+			//SetReadiness(gameID, playerID, 2, false);
+			return "api endpoint deprecated";
 		}
 
 
-		public void SetReadiness(string gameID, string playerID, int playerNum, bool ready)
-		{
-			SqlCommand cmd;
-			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
-			{
-				connection.Open();
-				// leave the game - if this is player2 and no moves have been played yet
-				string sql = "";
-				if (playerNum == 1) sql = "UPDATE [dbo].[ActiveGames] SET player1Ready = @ready WHERE Id = @gameID and player1 = @playerID and history is NULL";
-				if (playerNum == 2) sql = "UPDATE [dbo].[ActiveGames] SET player2Ready = @ready WHERE Id = @gameID and player2 = @playerID and history is NULL";
-				cmd = new SqlCommand(sql, connection);
-				cmd.Parameters.AddWithValue("@playerID", playerID);
-				cmd.Parameters.AddWithValue("@gameID", gameID);
-				cmd.Parameters.AddWithValue("@ready", ready);
-				// cmd.Parameters.AddWithValue("@datetime", System.DateTime.Now); // .ToString(dateTimeString));
-				cmd.ExecuteNonQuery();
-			}
-		}
+		//public void SetReadiness(string gameID, string playerID, int playerNum, bool ready)
+		//{
+		//	SqlCommand cmd;
+		//	using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+		//	{
+		//		connection.Open();
+		//		// leave the game - if this is player2 and no moves have been played yet
+		//		string sql = "";
+		//		if (playerNum == 1) sql = "UPDATE [dbo].[ActiveGames] SET player1Ready = @ready WHERE Id = @gameID and player1 = @playerID and history is NULL";
+		//		if (playerNum == 2) sql = "UPDATE [dbo].[ActiveGames] SET player2Ready = @ready WHERE Id = @gameID and player2 = @playerID and history is NULL";
+		//		cmd = new SqlCommand(sql, connection);
+		//		cmd.Parameters.AddWithValue("@playerID", playerID);
+		//		cmd.Parameters.AddWithValue("@gameID", gameID);
+		//		cmd.Parameters.AddWithValue("@ready", ready);
+		//		// cmd.Parameters.AddWithValue("@datetime", System.DateTime.Now); // .ToString(dateTimeString));
+		//		cmd.ExecuteNonQuery();
+		//	}
+		//}
 
 		// POST: api/Games
 		[HttpPost]
@@ -491,41 +481,23 @@ namespace GoGoBackend.Controllers
 		public async Task<string> DeleteGame(string gameID)
 		{
 			// get name of player1, the host, the only user authorized to delete the game
-			string player1 = "", player2 = "";
-			List<byte> history = new List<byte>();
 			string token = Request.Form["authtoken"];
 
-			string sql = "Select player1, player2, history from [dbo].[ActiveGames] where Id = @gameID";
-			using (SqlConnection dbConnection = new SqlConnection(Startup.ConnString))
-			using (SqlCommand dbCommand = new SqlCommand(sql, dbConnection))
-			{
-				dbCommand.Parameters.AddWithValue("@gameID", gameID);
-				dbConnection.Open();
+            Game game = ActivateGame(gameID);
 
-				SqlDataReader reader = dbCommand.ExecuteReader();
-
-				while (reader.Read())
-				{
-					player1 = (string)reader["player1"];
-					player2 = (string)reader["player2"];
-					var nullhist = reader["history"];
-					history = (nullhist == DBNull.Value) ? new List<byte>() : new List<byte>((byte[])nullhist);
-				}
-				dbConnection.Close();
-			}
 			if (token != "nanobot")
 			{
-				// only player1 can delete a non-finished game, and only if there is no player2
-				byte[] lastMoves = history.Skip(history.Count - 6).ToArray();
-				if (lastMoves.Length == 6)
-				{
-					if (lastMoves[2] == 0 && lastMoves[5] == 0)
-					{
-						// this game is over
-					}
-				}
-				if (player2 != "") return "game already in progress";
-				if (!UserController.ValidateAuthToken(player1, token)) return "auth token invalid";
+                // only player1 can delete a non-finished game, and only if there is no player2
+                if (game.gameover) return "";
+                if (game.history.Count < 6)
+                {
+                    // game hasn't started yet, ok to delete
+                    // check auth token
+                    if (!UserController.ValidateAuthToken(game.player1, token) &&
+                       !UserController.ValidateAuthToken(game.player2, token)) return "auth token invalid";
+
+                }
+                else return "game already in progress";
 			}
 
 			// delete a specific game
@@ -543,7 +515,7 @@ namespace GoGoBackend.Controllers
 			if (!UserController.ValidateAuthToken(playerID, token)) return "auth token invalid";
 
 			// delete all inactive (uninitialized) games
-			var cmd = new SqlCommand("delete [dbo].[ActiveGames] where player1 = @PlayerID and history is NULL");
+			var cmd = new SqlCommand("delete [dbo].[ActiveGames] where player1 = @PlayerID and gameover = 1");
 			cmd.Parameters.AddWithValue("@PlayerID", playerID);
 			await SqlCommand.Sql(cmd).Exec();
 			return "";

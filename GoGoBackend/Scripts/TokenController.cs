@@ -15,7 +15,7 @@ namespace GoToken
     using Nethereum.Hex.HexTypes;
     using Nethereum.Web3;
 
-    class TokenController
+    public static class TokenController
     {
         // get private key
         static string privatekey;

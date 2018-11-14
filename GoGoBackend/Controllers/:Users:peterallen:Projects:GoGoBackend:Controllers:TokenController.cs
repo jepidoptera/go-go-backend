@@ -5,13 +5,13 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Belgrade.SqlClient;
 using System.Data.SqlClient;
-using GoGoBackend.GoToken;
+using GoGoBackend;
 
 namespace GoGoBackend.Controllers
 {
 	[Produces("application/json")]
 	[Route("api/token")]
-	public class TokenController : Controller
+	public class DeleteMe : Controller
 	{
 
 		private readonly IQueryPipe SqlPipe;
