@@ -43,10 +43,10 @@ namespace GoGoBackend.Controllers
             // after applying whatever filters
             string sql;
             if (filter == "open")
-                sql = "select * from [dbo].[ActiveGames] WHERE (player2 is null or player2 = '') " +
-                    "and player1LastMove > DATEADD(ss, -5, GetUtcDate()) FOR JSON PATH";
+                sql = "select * from [dbo].[ActiveGames] WHERE player2 is null";
             else if (filter == "ongoing")
-                sql = "select * from [dbo].[ActiveGames] WHERE (player2 = @playerID or player1 = @playerID and player2 is not null) FOR JSON PATH";
+                sql = "select * from [dbo].[ActiveGames] WHERE gameover = 0 and history is not null and " +
+					"(player2 = @playerID or player1 = @playerID and player2 is not null) FOR JSON PATH";
             else if (filter == "challenge")
                 sql = "select * from [dbo].[ActiveGames] WHERE (player2 = @playerID and history is null) FOR JSON PATH";
             else

@@ -27,16 +27,28 @@ namespace GoGoBackend.Go
 			public int[] neighbors;
 		}
 
+		public enum Opcodes
+		{
+			pass = 0,
+			black = 1,
+			white = 2,
+			lake = 3,
+			illegal = 9,
+			gameover = 10,
+			ping = 15
+		}
+
 		public string player1, player2;
 		public List<byte> history;
 		public int gameMode;
 		public int boardSize;
-		public bool over = false;
+		public bool gameover = false;
 		private Node[] gameState;
         public int blackStonesCaptured = 0;
         public int whiteStonesCaptured = 0;
 		public int whiteScore = 0;
 		public int blackScore = 0;
+		public bool online = false;
 
 		private const int stone_black = 1;
 		private const int stone_white = 2;
@@ -45,7 +57,8 @@ namespace GoGoBackend.Go
 		private int turn;
 
 		private ManualResetEvent mre = new ManualResetEvent(false);
-		private byte x, y, opCode;
+		private byte x, y;
+		private Opcodes opcode;
 
 		// private bool active = false;
 
@@ -83,7 +96,7 @@ namespace GoGoBackend.Go
 			mre.Reset();
 			mre.WaitOne();
 			// once waitone has been released by the next call, return the value of the latest move
-			return string.Format("{0},{1},{2}", this.x, this.y, this.opCode);
+			return string.Format("{0},{1},{2}", this.x, this.y, (int)this.opcode);
 		}
 
 		// opcodes reference:
@@ -100,24 +113,24 @@ namespace GoGoBackend.Go
 			{
 				this.x = (byte)x;
 				this.y = (byte)y;
-				this.opCode = (byte)opCode;
+				this.opcode = (Opcodes)opCode;
 				// try to play that move
 				if (TryPlayStone(LocationOf(x, y), opCode))
 				{
 					// success
 					history.Add(this.x);
 					history.Add(this.y);
-					history.Add(this.opCode);
+					history.Add((byte)this.opcode);
 					// if game ends, return opcode 200
-					if (over)
+					if (gameover)
 					{
-						this.opCode = 200;
+						this.opcode = Opcodes.gameover;
 					}
 				}
 				else
 				{
 					// illegal move, lose one turn
-					this.opCode = 101;
+					this.opcode = Opcodes.illegal;
 				}
 				// trigger the previous instance of MakeMove to return the value of this (current) move
 				mre.Set();
@@ -406,7 +419,7 @@ namespace GoGoBackend.Go
 			int[] scores = Score(out captiveStones);
 			// capture those which were surrounded in enemy territory
 			CaptureStones(captiveStones);
-			over = true;
+			gameover = true;
 			// save final scores
 			blackScore = scores[0];
 			whiteScore = scores[1];

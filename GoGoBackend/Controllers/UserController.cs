@@ -78,6 +78,7 @@ namespace GoGoBackend.Controllers
 			string password = Request.Form["password"];
 			string username = Request.Form["username"];
 			string email = Request.Form["email"];
+			string ethAddress = Request.Form["ethAddress"];
 
 			SqlCommand cmd;
 
@@ -172,11 +173,13 @@ namespace GoGoBackend.Controllers
 			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
 			{
 				connection.Open();
-				string sql = "INSERT INTO [dbo].[Users] (Username,PasswordHash,Email,Validation_String) VALUES(@username,@passwordHash,@email,@validationString)";
+				string sql = "INSERT INTO [dbo].[Users] (Username,PasswordHash,Email,ethAddress,Validation_String)" +
+					" VALUES(@username,@passwordHash,@email,@ethAddress,@validationString)";
 				cmd = new SqlCommand(sql, connection);
 				cmd.Parameters.AddWithValue("@username", username);
 				cmd.Parameters.AddWithValue("@passwordHash", passwordHash);
 				cmd.Parameters.AddWithValue("@email", email);
+				cmd.Parameters.AddWithValue("@ethaddress", ethAddress);
 				cmd.Parameters.AddWithValue("@validationString", validationString);
 				cmd.ExecuteNonQuery();
 			}
@@ -492,6 +495,12 @@ namespace GoGoBackend.Controllers
 				email = (string)cmd.ExecuteScalar();
 			}
 			Emails.Server.SendNotificationEmail(email, message);
+		}
+
+		public Go.Player ActivatePlayer(string playerID)
+		{
+			if (Player.players.ContainsKey(playerID)) return Player.players[playerID];
+			// otherwise, create the player object from database info
 		}
 
 		// DELETE: api/user/username
