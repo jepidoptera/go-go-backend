@@ -513,7 +513,7 @@ namespace GoGoBackend.Controllers
             if (Player.players.ContainsKey(playerID)) return Player.players[playerID];
 
             // otherwise, create the player object from database info
-            string emailAddress = "", ethAddress = "";
+            string emailAddress = "", ethAddress = "", username = "";
             int gamesPlayed = 0, gamesWon = 0;
 
             // query database
@@ -528,16 +528,17 @@ namespace GoGoBackend.Controllers
 
                 while (reader.Read())
                 {
-                    // get required fields
-                    emailAddress = (string)reader["emailAddress"];
-                    ethAddress = (string)reader["ethAddress"];
-                    gamesPlayed = (int)reader["gamesPlayed"];
-                    gamesWon = (int)reader["gamesWon"];
+					// get required fields
+					if (!(reader["username"] is DBNull)) username = (string)reader["username"];
+					if (!(reader["email"] is DBNull)) emailAddress = (string)reader["email"];
+                    if (!(reader["ethAddress"] is DBNull)) ethAddress = (string)reader["ethAddress"];
+					if (!(reader["gamesPlayed"] is DBNull)) gamesPlayed = (int)reader["gamesPlayed"];
+					if (!(reader["gamesWon"] is DBNull)) gamesWon = (int)reader["gamesWon"];
                 }
                 dbConnection.Close();
             }
             // generate player object and return
-            return new Player(playerID, emailAddress, ethAddress, gamesPlayed, gamesWon);
+            return new Player(username, emailAddress, ethAddress, gamesPlayed, gamesWon);
             // success
         }
 

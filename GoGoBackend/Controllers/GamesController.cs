@@ -20,7 +20,6 @@ namespace GoGoBackend.Controllers
 	[Route("api/games")]
 	public class GamesController : Controller
 	{
-
 		private readonly IQueryPipe SqlPipe;
 		private readonly ICommand SqlCommand;
 
@@ -36,7 +35,7 @@ namespace GoGoBackend.Controllers
 		}
 
 		// GET: api/games/open
-		[HttpGet("open")]
+		[HttpGet("open/{playerID}")]
         public string ListGames(string filter = "open", string playerID = "")
 		{
             // return a comma-separated list of games
@@ -44,7 +43,7 @@ namespace GoGoBackend.Controllers
             List<Game> resultGames = new List<Game>();
             string sql;
             if (filter == "open")
-                sql = "select Id from [dbo].[ActiveGames] WHERE player2 is null";
+                sql = "select Id from [dbo].[ActiveGames] WHERE player2 ='' and player1 <> @playerID";
             else if (filter == "ongoing")
                 sql = "select Id from [dbo].[ActiveGames] WHERE gameover = 0 and history is not null and " +
 					"(player2 = @playerID or player1 = @playerID and player2 is not null)";
@@ -57,6 +56,8 @@ namespace GoGoBackend.Controllers
             using (SqlConnection connection = new SqlConnection(Startup.ConnString))
             using (SqlCommand cmd = new SqlCommand(sql, connection))
             {
+				if (sql.Contains("@playerID")) cmd.Parameters.AddWithValue("@playerID", playerID);
+
                 connection.Open();
                 SqlDataReader reader = cmd.ExecuteReader();
                 while (reader.Read())
@@ -169,7 +170,7 @@ namespace GoGoBackend.Controllers
             }
 
             // make sure this player is the one who's turn it is
-            if (game.currentPlayer != currentPlayer) 
+            if (game.currentPlayer != currentPlayer && opCode < (int)Game.Opcodes.ping) 
 			{
 				return "quit trying to cheat.";
 			}
@@ -202,12 +203,12 @@ namespace GoGoBackend.Controllers
 				{
 					message = string.Format("{0} passed their move.  It is now {1}'s turn.", currentPlayer, otherPlayer);
 				}
-				else if (opCode == 200)
+				else if (opCode == (int)Game.Opcodes.gameover)
 				{
 					message = string.Format("The game is now over.  Final score: \n {0}: {1} \n {2}: {3}",
 						game.player1, game.blackScore, game.player2, game.whiteScore);
 				}
-				else if (opCode == 101)
+				else if (opCode == (int)Game.Opcodes.illegal)
 				{
 					message = string.Format("{0} attempted an illegal move at {1}, {2} and was rejected. It is now {2}'s turn", currentPlayer, x, y, otherPlayer);
 				}
@@ -241,7 +242,7 @@ namespace GoGoBackend.Controllers
 
                 // give players their reward
                 if (player1Address != null) await TokenController.Send(player1Address, player1Reward);
-                if (player1Address != null) await TokenController.Send(player2Address, player2Reward);
+                if (player2Address != null) await TokenController.Send(player2Address, player2Reward);
 
                 // return code 'game over'
                 return string.Format("0,0,{0}", Game.Opcodes.gameover);
@@ -256,6 +257,10 @@ namespace GoGoBackend.Controllers
 
 		private Game ActivateGame(string gameID)
 		{
+			// if this game already exists in memory, return immediately with that reference
+			if (activeGames.ContainsKey(gameID)) return activeGames[gameID];
+
+			// otherwise, construct game object from the database
 			List<byte> history = new List<byte>();
 			string player1 = "", player2 = "";
 			int gameMode = 0, boardSize = 0;
@@ -281,8 +286,7 @@ namespace GoGoBackend.Controllers
 				}
 				dbConnection.Close();
 			}
-			// does this game even exist?? sanity check
-			if (player2 == "") return null;
+
 			// model it as an object with manual reset events and gamestate
 			return new Game(player1, player2, boardSize, gameMode, gameID, history);
 			// success
@@ -515,7 +519,7 @@ namespace GoGoBackend.Controllers
 			if (!UserController.ValidateAuthToken(playerID, token)) return "auth token invalid";
 
 			// delete all inactive (uninitialized) games
-			var cmd = new SqlCommand("delete [dbo].[ActiveGames] where player1 = @PlayerID and gameover = 1");
+			var cmd = new SqlCommand("delete [dbo].[ActiveGames] where player1 = @PlayerID and gameover is true");
 			cmd.Parameters.AddWithValue("@PlayerID", playerID);
 			await SqlCommand.Sql(cmd).Exec();
 			return "";

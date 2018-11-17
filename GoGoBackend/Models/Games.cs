@@ -38,6 +38,7 @@ namespace GoGoBackend.Go
 			ping = 15
 		}
 
+		public string Id = "";
 		public string player1, player2, currentPlayer;
 		public List<byte> history;
 		public int gameMode;
@@ -49,6 +50,7 @@ namespace GoGoBackend.Go
 		public int whiteScore = 0;
 		public int blackScore = 0;
 		public bool online = false;
+		public string description;
 
 		private const int stone_black = 1;
 		private const int stone_white = 2;
@@ -80,6 +82,7 @@ namespace GoGoBackend.Go
 		// take arguments from either of the two constructor options
 		private void Initialize(string player1, string player2, int boardSize, int gameMode, string gameID, List<byte> history)
 		{
+			this.Id = gameID;
 			this.history = history;
 			this.player1 = player1;
 			this.player2 = player2;
@@ -90,6 +93,9 @@ namespace GoGoBackend.Go
 			this.turn = 1;
 			if (history.Count > 0) PlayThrough(history, boardSize, gameMode);
 			activeGames[gameID] = this;
+			if (gameMode == 0) description = string.Format("standard square {0}x{0}", boardSize);
+			if (gameMode == 1) description = string.Format("icosasphere: {0}", boardSize);
+			if (gameMode == 2) description = string.Format("hexasphere: {0}", boardSize);
 		}
 
 		public string AwaitMove()
@@ -103,7 +109,7 @@ namespace GoGoBackend.Go
 		public void MakeMove(int x, int y, int opCode)
 		{
 			// record current move
-			if (opCode < 255)
+			if (opCode < (int)Opcodes.ping)
 			{
 				this.x = (byte)x;
 				this.y = (byte)y;
@@ -115,7 +121,7 @@ namespace GoGoBackend.Go
 					history.Add(this.x);
 					history.Add(this.y);
 					history.Add((byte)this.opcode);
-					// if game ends, return opcode 200
+					// if game ends, return opcode.gameover
 					if (gameover)
 					{
 						this.opcode = Opcodes.gameover;
@@ -132,7 +138,7 @@ namespace GoGoBackend.Go
 			}
 			else
 			{
-				// opcode == 255 indicates this isn't a real move but just priming the resetEvent to receive the next one
+				// opcode.ping indicates this isn't a real move but just priming the resetEvent to receive the next one
 				return;
 			}
 		}
