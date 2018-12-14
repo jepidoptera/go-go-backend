@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Security.Cryptography;
+using StringManipulation;
 
 namespace GoGoBackend.Go
 {
@@ -15,25 +17,38 @@ namespace GoGoBackend.Go
         public int stones;
         public float rank;
         public bool validated;
-        public string validation_String;
-        public string passwordHash;
+        public string validationString;
+        public byte[] passwordHash;
         public string email;
         public bool emailNotifications;
         public string ethAddress;
+        public byte[] authCodeHash;
 
-		DateTime lastPing;
-		public Player(string username, string emailAddress = "", string ethAddress = "", int gamesPlayed = 0, int gamesWon = 0)
-		{
-            this.ethAddress = ethAddress;
-            this.email = emailAddress;
-            this.gamesPlayed = gamesPlayed;
-            this.gamesWon = gamesWon;
-            this.username = username;
+
+        DateTime lastPing;
+		//public Player()
+        //(string username, string emailAddress = "", string ethAddress = "", 
+        //int gamesPlayed = 0, int gamesWon = 0, byte[] authtokenHash = null,
+        //bool validated = false, string validationString = "", string email = "", bool emailNotifications = false)
+		//{
+            //this.ethAddress = ethAddress;
+            //this.email = emailAddress;
+            //this.gamesPlayed = gamesPlayed;
+            //this.gamesWon = gamesWon;
+            //this.username = username;
+            //this.authtokenHash = authtokenHash;
+            //this.validated = validated;
+            //this.validationString = validationString;
             // add to static players list
-            players.Add(username, this);
-		}
+            //nplayers.Add(username, this);
+		//}
 
-		public void Ping()
+        public static void Add(Player player)
+        {
+            players.Add(player.username.ToLower(), player);
+        }
+
+        public void Ping()
 		{
 			lastPing = DateTime.UtcNow;
 		}
@@ -43,5 +58,14 @@ namespace GoGoBackend.Go
 		{
 			return DateTime.UtcNow.Subtract(lastPing) < TimeSpan.FromSeconds(11);
 		}
-	}
+
+        // check if authtoken is valid
+        public bool ValidateAuthToken(string token)
+        {
+            using (MD5 md5Hash = MD5.Create())
+            {
+                return md5Hash.ComputeHash(token.ToHexBytes()).EqualsTo(authCodeHash);
+            }
+        }
+    }
 }

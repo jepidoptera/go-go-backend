@@ -133,7 +133,7 @@ namespace GoGoBackend.Go
 					this.opcode = Opcodes.illegal;
 				}
 				// trigger the previous instance of MakeMove to return the value of this (current) move
-				mre.Set();
+				if (!gameover) mre.Set();
 				return;
 			}
 			else
@@ -143,11 +143,20 @@ namespace GoGoBackend.Go
 			}
 		}
 
-		// attempt to play a 
-		// if the move isn't legal for any reason, return false
-		bool TryPlayStone(int location, int color)
+        // return value without
+        public void ReturnMove(int x, int y, int opcode)
+        {
+            this.x = (byte)x;
+            this.y = (byte)y;
+            this.opcode = (Opcodes)opcode;
+            mre.Set();
+        }
+
+        // attempt to play a 
+        // if the move isn't legal for any reason, return false
+        bool TryPlayStone(int location, int color)
 		{
-			if (color == 0)
+			if (color == (int)Opcodes.pass)
 			{
 				PassTurn();
 				return true;
@@ -181,10 +190,13 @@ namespace GoGoBackend.Go
 				return false;
 			}
 
-			// todo: research and implement ko rule
+            // todo: research and implement ko rule
 
-			// played successfully
-			return true;
+            // if turn was not passed and was played successfully, reset pass turn count
+            passTurns = 0;
+
+            // played successfully
+            return true;
 		}
 
 		private void CaptureStones(List<int> captures)
