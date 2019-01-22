@@ -65,7 +65,11 @@ namespace GoGoBackend.Controllers
                 {
                     // retrieve Game object
                     Game tGame = ActivateGame(reader.GetString(0));
-                    tGame.online = UserController.ActivatePlayer(tGame.player1).IsOnline(); // todo: check the other player, the one who is not submitting this query
+                    // is this player online?
+                    // check the other player, the one who is not submitting this query
+                    tGame.online = (playerID.Equals(tGame.player1, StringComparison.OrdinalIgnoreCase))
+                        ? UserController.ActivatePlayer(tGame.player2).IsOnline()
+                        : UserController.ActivatePlayer(tGame.player1).IsOnline(); 
                     resultGames.Add(tGame);
                 }
                 // return json string listing relevant games.
@@ -248,9 +252,11 @@ namespace GoGoBackend.Controllers
                     UserController.ActivatePlayer(game.player1),
                     UserController.ActivatePlayer(game.player2)
                 };
-                int splitPercentage = Math.Min(50 + (int)(50 * Math.Abs(game.blackScore - game.whiteScore) * 2f / game.NodeCount), 99);
-                int player1Reward = (game.blackScore > game.whiteScore) ? splitPercentage : 100 - splitPercentage;
-                int player2Reward = 100 - player1Reward;
+                // distribute one coin for each move that was played
+                int totalReward = game.history.Count / 3;
+                int maxReward = Math.Min(totalReward / 2 + (int)(totalReward / 2 * Math.Abs(game.blackScore - game.whiteScore) * 2f / game.NodeCount), totalReward - 1);
+                int player1Reward = (game.blackScore > game.whiteScore) ? maxReward : totalReward - maxReward;
+                int player2Reward = totalReward - player1Reward;
                 int winner = (game.blackScore > game.whiteScore) ? 0 : 1;
 
                 // give players their reward
@@ -336,7 +342,7 @@ namespace GoGoBackend.Controllers
             List<string> args = new List<string>();
             if (gameover != null)
             {
-                args.Add("@gameover = " + ((bool)gameover).ToString());
+                args.Add("gameover = @gameover");
                 game.gameover = (bool)gameover;
             }
             sql += string.Join(", ", args.ToArray()) + " where Id = @gameid";
@@ -547,14 +553,12 @@ namespace GoGoBackend.Controllers
 		[HttpPost("delete/{gameID}")]
 		public async Task<string> DeleteGame(string gameID)
 		{
-			// get name of player1, the host, the only user authorized to delete the game
 			string token = Request.Form["authtoken"];
 
             Game game = ActivateGame(gameID);
 
 			if (token != "nanobot")
 			{
-                // only player1 can delete a non-finished game, and only if there is no player2
                 if (game.gameover) return "";
                 if (game.history.Count < 6)
                 {
@@ -590,7 +594,7 @@ namespace GoGoBackend.Controllers
 			if (!UserController.ValidateAuthToken(playerID, token)) return "auth token invalid";
 
 			// delete all inactive (uninitialized) games
-			var cmd = new SqlCommand("delete [dbo].[ActiveGames] where player1 = @PlayerID and gameover is true");
+			var cmd = new SqlCommand("delete [dbo].[ActiveGames] where player1 = @PlayerID and gameover = 'true'");
 			cmd.Parameters.AddWithValue("@PlayerID", playerID);
 			await SqlCommand.Sql(cmd).Exec();
 			return "";

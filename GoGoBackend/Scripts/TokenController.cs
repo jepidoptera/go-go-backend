@@ -58,11 +58,17 @@ namespace GoToken
         public static async Task<string> Send(string sendAddress, int amount)
         {
             if (!init) Initialize();
-            // set up secrets if that has not been done
-            if (tokenAddress == "") Initialize();
-            // send tokens to address
-            string result = await goToken.TransferAsync<string>(account.Address, sendAddress, amount.ToString(), new HexBigInteger(60000));
-            return result;
+            try
+            {
+                // send tokens to address
+                string result = await goToken.TransferAsync<string>(account.Address, sendAddress, amount.ToString(), new HexBigInteger(60000));
+                return result;
+            }
+            catch
+            {
+                // failed (bad address, maybe)
+                return "";
+            }
         }
 
         public static async Task<int> GetBalance(string address)
@@ -88,8 +94,6 @@ namespace GoToken
         {
             if (!init) Initialize();
             privatekey = Secrets.key["privatekey"];
-            // account 2
-            // privatekey = "95d16070fca17cb283db778650817b58b42c3ce8c164cd038037ba77bbad80f7";
             tokenAddress = Secrets.key["address"];
             abi = Secrets.key["abi"];
             url = Secrets.key["infura_url"];
