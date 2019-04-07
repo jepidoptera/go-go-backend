@@ -106,7 +106,8 @@ namespace GoGoBackend.Controllers
 		public string PostNewGame()
 		{
 			string gameID;
-			string player1 = Request.Form["player1"];
+			// switch players - challenger should go second, right?
+            string player1 = Request.Form["player1"];
 			string player2 = Request.Form["player2"];
 			string token = Request.Form["authtoken"];
 			int boardSize = Convert.ToInt32(Request.Form["boardsize"]);
@@ -188,9 +189,8 @@ namespace GoGoBackend.Controllers
 			}
 
 			// add the move to the active game object
-			game.MakeMove(x, y, opCode);
 
-			if (opCode < (int)Game.Opcodes.ping)
+			if (game.MakeMove(x, y, opCode))
 			{
 				// add to move history in the database
 				SqlCommand cmd;
@@ -245,7 +245,7 @@ namespace GoGoBackend.Controllers
 			{
                 // if so, end it and reward tokens to players
                 // reward with erc20 tokens
-                // award 100 per game, split according to score
+                // one token per move that was played, split according to score
                 // figure out how many go to each player
                 Player[] players =
                 {
