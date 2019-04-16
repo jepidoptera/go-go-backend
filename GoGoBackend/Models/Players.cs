@@ -23,7 +23,12 @@ namespace GoGoBackend.Go
         public bool emailNotifications;
         public string ethAddress;
         public byte[] authCodeHash;
-
+        private List<string> messages = new List<string>();
+        public string Message
+        {
+            get { string returnval = null; if (messages.Count > 0) { returnval = messages[0]; messages.RemoveAt(0); } return returnval; }
+            set { messages.Add(value); }
+        }
 
         DateTime lastPing;
 		//public Player()
@@ -45,6 +50,7 @@ namespace GoGoBackend.Go
 
         public static void Add(Player player)
         {
+            // add this play object to static list
             players.Add(player.username.ToLower(), player);
         }
 

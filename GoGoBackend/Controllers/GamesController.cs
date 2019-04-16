@@ -145,6 +145,12 @@ namespace GoGoBackend.Controllers
 			// create a new active game
 			new Game(player1, player2, boardSize, mode, gameID);
 
+            // notify player2 of the challenge
+            if (player2 != "")
+            {
+                UserController.ActivatePlayer(player2).Message = "challenge: " + player1;
+            }
+
 			return gameID;
 		}
 
@@ -431,6 +437,9 @@ namespace GoGoBackend.Controllers
             // update in-memory game object
             Game game = ActivateGame(gameID);
             game.player2 = playerID;
+
+            // notify player1 that their challenge was accepted
+            UserController.ActivatePlayer(game.player1).Message = "accepted: " + game.player2;
 			return "joined";
 		}
 
@@ -467,60 +476,6 @@ namespace GoGoBackend.Controllers
 			//}
 			return "api endpoint deprecated";
 		}
-
-		// checked ready button
-		[HttpPost("ready/{gameID}")]
-		public string SignalReady(string gameID)
-		{
-			//string playerID = Request.Form["playerID"];
-			//string token = Request.Form["authtoken"];
-
-			//// auth token required for this action
-			//if (!UserController.ValidateAuthToken(playerID, token))
-			//{
-			//	return "auth token invalid";
-			//}
-			//SetReadiness(gameID, playerID, 1, true);
-			//SetReadiness(gameID, playerID, 2, true);
-			return "api endpoint deprecated";
-		}
-
-		// un-checked ready button
-		[HttpPost("unready/{gameID}")]
-		public string SignalUnReady(string gameID)
-		{
-			//string playerID = Request.Form["playerID"];
-			//string token = Request.Form["authtoken"];
-
-			//// auth token required for this action
-			//if (!UserController.ValidateAuthToken(playerID, token))
-			//{
-			//	return "auth token invalid";
-			//}
-			//SetReadiness(gameID, playerID, 1, false);
-			//SetReadiness(gameID, playerID, 2, false);
-			return "api endpoint deprecated";
-		}
-
-
-		//public void SetReadiness(string gameID, string playerID, int playerNum, bool ready)
-		//{
-		//	SqlCommand cmd;
-		//	using (SqlConnection connection = new SqlConnection(Startup.ConnString))
-		//	{
-		//		connection.Open();
-		//		// leave the game - if this is player2 and no moves have been played yet
-		//		string sql = "";
-		//		if (playerNum == 1) sql = "UPDATE [dbo].[ActiveGames] SET player1Ready = @ready WHERE Id = @gameID and player1 = @playerID and history is NULL";
-		//		if (playerNum == 2) sql = "UPDATE [dbo].[ActiveGames] SET player2Ready = @ready WHERE Id = @gameID and player2 = @playerID and history is NULL";
-		//		cmd = new SqlCommand(sql, connection);
-		//		cmd.Parameters.AddWithValue("@playerID", playerID);
-		//		cmd.Parameters.AddWithValue("@gameID", gameID);
-		//		cmd.Parameters.AddWithValue("@ready", ready);
-		//		// cmd.Parameters.AddWithValue("@datetime", System.DateTime.Now); // .ToString(dateTimeString));
-		//		cmd.ExecuteNonQuery();
-		//	}
-		//}
 
 		// POST: api/Games
 		[HttpPost]

@@ -491,7 +491,7 @@ namespace GoGoBackend.Controllers
             Player player = ActivatePlayer(playerID);
             if (player == null) return null;
             player.Ping();
-            return "ping";
+            return player.Message;
         }
 
         public static Player ActivatePlayer(string playerID)
