@@ -4,7 +4,7 @@ using Nethereum.Contracts;
 using Nethereum.ABI;
 using Nethereum.StandardTokenEIP20;
 using Nethereum.Web3.Accounts;
-using SecretKeys;
+using GoGoBackend.Controllers;
 
 namespace GoToken
 {
@@ -40,11 +40,11 @@ namespace GoToken
         private static void Initialize()
         {
             // set up magic numbers
-            tokenAddress = Secrets.key["address"];
-            abi = Secrets.key["abi"];
-            url = Secrets.key["infura_url"];
+            tokenAddress = SecretsController.SecretKey("address");
+            abi = SecretsController.SecretKey("abi");
+            url = SecretsController.SecretKey("infura_url");
             // account 1
-            privatekey = Secrets.key["privatekey"];
+            privatekey = SecretsController.SecretKey("privatekey");
             // account 2
             // privatekey = "95d16070fca17cb283db778650817b58b42c3ce8c164cd038037ba77bbad80f7";
             account = new Account(privatekey);
@@ -80,12 +80,12 @@ namespace GoToken
 
         public static void ArbitraryFunction(string command = "")
         {
-            privatekey = Secrets.key["privatekey"];
+            privatekey = SecretsController.SecretKey("privatekey");
             // account 2
             // privatekey = "95d16070fca17cb283db778650817b58b42c3ce8c164cd038037ba77bbad80f7";
-            tokenAddress = Secrets.key["address"];
-            abi = Secrets.key["abi"];
-            url = Secrets.key["infura_url"];
+            tokenAddress = SecretsController.SecretKey("address");
+            abi = SecretsController.SecretKey("abi");
+            url = SecretsController.SecretKey("infura_url");
             account = new Account(privatekey);
             web3 = new Web3(account, url);
             Contract goTokenContract = web3.Eth.GetContract(abi, tokenAddress);

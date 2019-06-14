@@ -9,6 +9,7 @@ using SendGrid.Helpers.Mail;
 using System.Net.Http;
 using Microsoft.Extensions.Configuration;
 using SecretKeys;
+using GoGoBackend.Controllers;
 
 namespace Emails
 {
@@ -17,8 +18,8 @@ namespace Emails
 		// static bool mailSent = false;
 		const string smtpServer = "Smtp.gmail.com";
 		const string smtpAddress = "gogobackend@gmail.com";
-		static readonly string smtpPassword = Secrets.key["smtpPassword"];
-        static readonly string apiKey = Secrets.key["apiKey"];
+		static readonly string smtpPassword = SecretsController.SecretKey("smtpPassword");
+        static readonly string apiKey = SecretsController.SecretKey("apiKey");
 
 		public static async Task SendValidationMail(string recipient, string validationLink)
 		{

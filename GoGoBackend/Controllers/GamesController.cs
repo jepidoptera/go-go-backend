@@ -53,7 +53,7 @@ namespace GoGoBackend.Controllers
                 sql = "select Id from [dbo].[ActiveGames]";
 
             // query the result
-            using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+            using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
             using (SqlCommand cmd = new SqlCommand(sql, connection))
             {
 				if (sql.Contains("@playerID")) cmd.Parameters.AddWithValue("@playerID", playerID);
@@ -122,7 +122,7 @@ namespace GoGoBackend.Controllers
 			}
 
 			// insert new game entry into the database
-			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
 			{
 				connection.Open();
 				string sql = "INSERT INTO [dbo].[ActiveGames] (Id,Player1,Player2,BoardSize,Mode,Player1LastMove) VALUES(@Id,@Player1,@Player2,@BoardSize,@Mode,GetUtcDate())";
@@ -182,7 +182,7 @@ namespace GoGoBackend.Controllers
 			{
 				// add to move history in the database
 				SqlCommand cmd;
-				using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+				using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
 				{
 					connection.Open();
 					string sql = "UPDATE [dbo].[ActiveGames] SET history = @history WHERE Id = @gameID";
@@ -267,7 +267,7 @@ namespace GoGoBackend.Controllers
 
 			// get game info from database
 			string sql = "Select player1, player2, boardSize, mode, history from [dbo].[ActiveGames] where Id = @gameID";
-			using (SqlConnection dbConnection = new SqlConnection(Startup.ConnString))
+			using (SqlConnection dbConnection = new SqlConnection(SecretsController.ConnString))
 			using (SqlCommand dbCommand = new SqlCommand(sql, dbConnection))
 			{
 				dbCommand.Parameters.AddWithValue("@gameID", gameID);
@@ -348,7 +348,7 @@ namespace GoGoBackend.Controllers
 			}
 
 			SqlCommand cmd;
-			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
 			{
 				connection.Open();
                 string sql = "UPDATE [dbo].[ActiveGames] SET player2 = @playerID, player2LastMove = GetUTCDate() WHERE Id = @gameID";
@@ -379,7 +379,7 @@ namespace GoGoBackend.Controllers
 			//}
 
 			//SqlCommand cmd;
-			//using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			//using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
 			//{
 			//	connection.Open();
 			//	// leave the game - if this is player2 and no moves have been played yet
@@ -400,6 +400,7 @@ namespace GoGoBackend.Controllers
 		}
 
 		// checked ready button
+		// we don't actually do this anymore
 		[HttpPost("ready/{gameID}")]
 		public string SignalReady(string gameID)
 		{
@@ -437,7 +438,7 @@ namespace GoGoBackend.Controllers
 		//public void SetReadiness(string gameID, string playerID, int playerNum, bool ready)
 		//{
 		//	SqlCommand cmd;
-		//	using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+		//	using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
 		//	{
 		//		connection.Open();
 		//		// leave the game - if this is player2 and no moves have been played yet

@@ -46,7 +46,7 @@ namespace GoGoBackend.Controllers
         {
             List<string> results = new List<string>();
             string sql = "select username from[dbo].[Users]";
-            using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+            using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
             using (SqlCommand cmd = new SqlCommand(sql, connection))
             {
                 connection.Open();
@@ -110,7 +110,7 @@ namespace GoGoBackend.Controllers
 			else
 			{
 				// check if username is already taken
-				using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+				using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
 				{
 					connection.Open();
 					cmd = new SqlCommand("Select Validated from [dbo].[Users] where username=@username", connection);
@@ -170,7 +170,7 @@ namespace GoGoBackend.Controllers
 			}
 
 			// insert new username entry into the database
-			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
 			{
 				connection.Open();
 				string sql = "INSERT INTO [dbo].[Users] (Username,PasswordHash,Email,ethAddress,Validation_String)" +
@@ -205,7 +205,7 @@ namespace GoGoBackend.Controllers
             byte[] passcheck = new byte[16];
             bool validated = false;
             bool foundUser = false;
-            using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+            using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
             {
                 var cmd = new SqlCommand("select PasswordHash, Validated from [dbo].[Users] where username = @id", connection);
                 cmd.Parameters.AddWithValue("@id", username);
@@ -291,7 +291,7 @@ namespace GoGoBackend.Controllers
 		public static bool ValidateAuthToken(string username, string token)
 		{
 			byte[] authCode = new byte[0];
-			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
 			{
 				var cmd = new SqlCommand("select authCodeHash from [dbo].[Users] where Username = @username", connection);
 				cmd.Parameters.AddWithValue("@username", username);
@@ -322,7 +322,7 @@ namespace GoGoBackend.Controllers
         {
             T[] returnVal = new T[fields.Length];
             string sql = string.Format("select {0} from [dbo].[Users] where username = @username", string.Join(", ", fields));
-            using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+            using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
             using (SqlCommand cmd = new SqlCommand(sql, connection))
             {
                 connection.Open();
@@ -460,7 +460,7 @@ namespace GoGoBackend.Controllers
 		public static bool NotificationsOn(string username)
 		{
 			bool returnVal = false;
-			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
 			{
 				var cmd = new SqlCommand("select EmailNotifications from [dbo].[Users] where Username = @username", connection);
 				cmd.Parameters.AddWithValue("@username", username);
@@ -487,7 +487,7 @@ namespace GoGoBackend.Controllers
 		{
 			// retrieve user's email address
 			string email = "";
-			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
 			{
 				connection.Open();
 				SqlCommand cmd = new SqlCommand("Select email from [dbo].[Users] where username=@username", connection);
@@ -518,7 +518,7 @@ namespace GoGoBackend.Controllers
 
             // query database
             string sql = "Select * from [dbo].[Users] where username = @playerID";
-            using (SqlConnection dbConnection = new SqlConnection(Startup.ConnString))
+            using (SqlConnection dbConnection = new SqlConnection(SecretsController.ConnString))
             using (SqlCommand dbCommand = new SqlCommand(sql, dbConnection))
             {
                 dbCommand.Parameters.AddWithValue("@playerID", playerID);

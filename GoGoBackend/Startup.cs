@@ -11,7 +11,6 @@ using Microsoft.Extensions.Options;
 using Belgrade.SqlClient;
 using Belgrade.SqlClient.SqlDb;
 using System.Data.SqlClient;
-using SecretKeys;
 
 namespace GoGoBackend
 {
@@ -19,21 +18,23 @@ namespace GoGoBackend
     {
 		public const string serverName = "gogobackend.database.windows.net";
 		public const string apiServer = "https://gogobackend.azurewebsites.net";
-		public static readonly string ConnString = 
-		"Server=tcp:" + serverName + ",1433;Initial Catalog = user_registry; Persist Security Info=False;User ID = Jepidoptera; Password=" +
-			Secrets.key["databasePassword"] + "; MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout = 30;";
 
-	public Startup(IConfiguration configuration)
-        {
-            Configuration = configuration;
-        }
+		public Startup(IHostingEnvironment env)
+		{
+			var builder = new ConfigurationBuilder()
+				.SetBasePath(env.ContentRootPath)
+				.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
 
-        public IConfiguration Configuration { get; }
+			Configuration = builder.Build();
+		}
+
+		public IConfiguration Configuration { get; }
 
 		// This method gets called by the runtime. Use this method to add services to the container.
 		public void ConfigureServices(IServiceCollection services)
 		{
-
+			var ConnString = "Server=tcp:" + serverName + ",1433;Initial Catalog = user_registry; Persist Security Info=False;User ID = Jepidoptera; Password=" +
+			Configuration.GetSection("Secrets:databasePassword") + "; MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout = 30;";
 
 			services.AddTransient<IQueryPipe>(_ => new QueryPipe(new SqlConnection(ConnString)));
 			services.AddTransient<ICommand>(_ => new Command(new SqlConnection(ConnString)));
