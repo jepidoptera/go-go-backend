@@ -86,7 +86,7 @@ namespace GoGoBackend.Go
 			this.history = history;
 			this.player1 = player1;
 			this.player2 = player2;
-            currentPlayer = player1;
+            currentPlayer = player2;
 			this.boardSize = boardSize;
 			this.gameMode = gameMode;
 			this.gameState = BuildNodeGraph(gameMode, boardSize);
@@ -106,7 +106,7 @@ namespace GoGoBackend.Go
 			return string.Format("{0},{1},{2}", this.x, this.y, (int)this.opcode);
 		}
 
-		public void MakeMove(int x, int y, int opCode)
+		public bool MakeMove(int x, int y, int opCode)
 		{
 			// record current move
 			if (opCode < (int)Opcodes.ping)
@@ -131,23 +131,34 @@ namespace GoGoBackend.Go
 				{
 					// illegal move, lose one turn
 					this.opcode = Opcodes.illegal;
+                    mre.Set();
+                    return false;
 				}
 				// trigger the previous instance of MakeMove to return the value of this (current) move
-				mre.Set();
-				return;
+				if (!gameover) mre.Set();
+				return true;
 			}
 			else
 			{
 				// opcode.ping indicates this isn't a real move but just priming the resetEvent to receive the next one
-				return;
+				return false;
 			}
 		}
 
-		// attempt to play a 
-		// if the move isn't legal for any reason, return false
-		bool TryPlayStone(int location, int color)
+        // return value without adding an actual move - happens at gameover
+        public void ReturnMove(int x, int y, int opcode)
+        {
+            this.x = (byte)x;
+            this.y = (byte)y;
+            this.opcode = (Opcodes)opcode;
+            mre.Set();
+        }
+
+        // attempt to play a stone
+        // if the move isn't legal for any reason, return false
+        bool TryPlayStone(int location, int color)
 		{
-			if (color == 0)
+			if (color == (int)Opcodes.pass)
 			{
 				PassTurn();
 				return true;
@@ -181,10 +192,13 @@ namespace GoGoBackend.Go
 				return false;
 			}
 
-			// todo: research and implement ko rule
+            // todo: research and implement ko rule
 
-			// played successfully
-			return true;
+            // if turn was not passed and was played successfully, reset pass turn count
+            passTurns = 0;
+
+            // played successfully
+            return true;
 		}
 
 		private void CaptureStones(List<int> captures)
@@ -216,7 +230,7 @@ namespace GoGoBackend.Go
 		{
 			// switch turns
 			turn = (turn == stone_white) ? stone_black : stone_white;
-            currentPlayer = (turn == stone_black) ? player1 : player2;
+            currentPlayer = (turn == stone_black) ? player2 : player1;
 		}
 
 		// create a list of points which contain stones which would be captured if current player moves at [location]
