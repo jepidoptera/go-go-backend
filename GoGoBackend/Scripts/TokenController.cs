@@ -36,6 +36,8 @@ namespace GoToken
         static Account account;
         static Web3 web3;
 
+        static bool init;
+
 
         private static void Initialize()
         {
@@ -50,26 +52,36 @@ namespace GoToken
             account = new Account(privatekey);
             web3 = new Web3(account, url);
             goToken = new StandardTokenService(web3, tokenAddress);
+            init = true;
         }
 
         public static async Task<string> Send(string sendAddress, int amount)
         {
-            // set up secrets if that has not been done
-            if (tokenAddress == "") Initialize();
-            // send tokens to address
-            string result = await goToken.TransferAsync<string>(account.Address, sendAddress, amount.ToString(), new HexBigInteger(60000));
-            return result;
+            if (!init) Initialize();
+            try
+            {
+                // send tokens to address
+                string result = await goToken.TransferAsync<string>(account.Address, sendAddress, amount.ToString(), new HexBigInteger(60000));
+                return result;
+            }
+            catch
+            {
+                // failed (bad address, maybe)
+                return "";
+            }
         }
 
-        public static async Task<float> GetBalance(string address)
+        public static async Task<int> GetBalance(string address)
         {
+            if (!init) Initialize();
             // get balance of an address
-            float balance = await goToken.GetBalanceOfAsync<float>(address);
+            int balance = await goToken.GetBalanceOfAsync<int>(address);
             return balance;
         }
 
         static string GetSendAmount()
         {
+            if (!init) Initialize();
             // get input
             Console.WriteLine("enter amount to send");
             string returnval = Console.ReadLine(); // + "000000000000000000";
