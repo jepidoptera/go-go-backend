@@ -11,7 +11,7 @@
     "IIS Express": {
       "commandName": "IISExpress",
       "launchBrowser": true,
-      "launchUrl": "api/secrets",
+      "launchUrl": "api/games/all",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }

@@ -53,7 +53,7 @@ namespace GoGoBackend.Controllers
                 sql = "select Id from [dbo].[ActiveGames]";
 
             // query the result
-            using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+            using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
             using (SqlCommand cmd = new SqlCommand(sql, connection))
             {
 				if (sql.Contains("@playerID")) cmd.Parameters.AddWithValue("@playerID", playerID);
@@ -103,7 +103,7 @@ namespace GoGoBackend.Controllers
 
 		// GET: api/games/new
 		[HttpPost("new")]
-		public string PostNewGame()
+		public JsonResult PostNewGame()
 		{
 			string gameID;
 			// switch players - challenger should go second, right?
@@ -113,12 +113,33 @@ namespace GoGoBackend.Controllers
 			int boardSize = Convert.ToInt32(Request.Form["boardsize"]);
 			int mode = Convert.ToInt32(Request.Form["mode"]);
 
+			// validate data
+			if (player1 == null) return Json(new { error = "missing: player1. " });
+			if (boardSize == 0) return Json(new { error = "missing: board size. " });
+			if (player2 == null) player2 = "";
+
 			SqlCommand cmd;
 
 			// check if player1 is logged in
 			if (!UserController.ValidateAuthToken(player1, token))
 			{
-				return "auth token invalid";
+				return Json(new { message = "auth token invalid. please log in again." });
+			}
+
+			// check if player2 exists
+			if (player2 != "")
+			{
+				Player Player2 = UserController.ActivatePlayer(player2);
+				if (Player2 != null)
+				{
+					// notify them of the challenge
+					Player2.Message = "challenge: " + player1;
+					// may as well get the capitalization right
+					player2 = Player2.username;
+				}
+				else
+					// player2 does not exist. request fails
+					return Json(new { message = player2 + " not found in database." });
 			}
 
 			// create a game id by hashing two usernames + current date/time
@@ -129,7 +150,7 @@ namespace GoGoBackend.Controllers
 			}
 
 			// insert new game entry into the database
-			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
 			{
 				connection.Open();
 				string sql = "INSERT INTO [dbo].[ActiveGames] (Id,Player1,Player2,BoardSize,Mode,Player1LastMove) VALUES(@Id,@Player1,@Player2,@BoardSize,@Mode,GetUtcDate())";
@@ -145,13 +166,7 @@ namespace GoGoBackend.Controllers
 			// create a new active game
 			new Game(player1, player2, boardSize, mode, gameID);
 
-            // notify player2 of the challenge
-            if (player2 != "")
-            {
-                UserController.ActivatePlayer(player2).Message = "challenge: " + player1;
-            }
-
-			return gameID;
+			return Json(new { gameID });
 		}
 
 		// POST: /api/Games/{ID}/Move
@@ -200,7 +215,7 @@ namespace GoGoBackend.Controllers
 			{
 				// add to move history in the database
 				SqlCommand cmd;
-				using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+				using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
 				{
 					connection.Open();
                     string changes = "SET history = @history";
@@ -311,11 +326,12 @@ namespace GoGoBackend.Controllers
 			// otherwise, construct game object from the database
 			List<byte> history = new List<byte>();
 			string player1 = "", player2 = "";
+			string player1LastMove, player2LastMove;
 			int gameMode = 0, boardSize = 0;
 
 			// get game info from database
 			string sql = "Select player1, player2, boardSize, mode, history from [dbo].[ActiveGames] where Id = @gameID";
-			using (SqlConnection dbConnection = new SqlConnection(Startup.ConnString))
+			using (SqlConnection dbConnection = new SqlConnection(SecretsController.ConnString))
 			using (SqlCommand dbCommand = new SqlCommand(sql, dbConnection))
 			{
 				dbCommand.Parameters.AddWithValue("@gameID", gameID);
@@ -329,6 +345,12 @@ namespace GoGoBackend.Controllers
 					player2 = (string)reader["player2"];
 					gameMode = (int)reader["mode"];
 					boardSize = (int)reader["boardSize"];
+					// these ones have to be handled a bit differently because they are optional fields and may be DBNull
+					// not regular null -- DBNull.
+					//var lastMove =reader. reader["player1LastMove"];
+					//player1LastMove = (lastMove == DBNull.Value) ? "" : (string)lastMove;
+					//lastMove = reader["player2LastMove"];
+					//player2LastMove = (lastMove == DBNull.Value) ? "" : (string)lastMove;
 					var nullhist = reader["history"];
 					history = (nullhist == DBNull.Value) ? new List<byte>() : new List<byte>((byte[])nullhist);
 				}
@@ -353,7 +375,7 @@ namespace GoGoBackend.Controllers
             }
             sql += string.Join(", ", args.ToArray()) + " where Id = @gameid";
 
-            using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+            using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
             using (SqlCommand cmd = new SqlCommand(sql, connection))
             {
                 connection.Open();
@@ -411,36 +433,52 @@ namespace GoGoBackend.Controllers
 
 		// POST: api/games/join/{gameID}
 		[HttpPost("join/{gameID}")]
-		public string JoinGame(string gameID)
+		public JsonResult JoinGame(string gameID)
 		{
-			string playerID = Request.Form["playerID"];
+			string username = Request.Form["username"];
 			string token = Request.Form["authtoken"];
 
-			// auth token required for this action
-			if (!UserController.ValidateAuthToken(playerID, token))
+			// do some validation
+			Game game = ActivateGame(gameID);
+			if (game == null)
 			{
-				return "auth token invalid";
+				return Json(new { error = "game does not exist." });
+			}
+			else if (game.player2 != "" && game.player2 != username)
+			{
+				return Json(new { error = "game is already in progress." });
 			}
 
+			// any player can do this if the game is open, but
+			// auth token required for this action
+			if (!UserController.ValidateAuthToken(username, token))
+			{
+				return Json(new { error = "auth token invalid." });
+			}
+
+			// assuming this game has no current history, add a token "joined game" move
+			game.history.AddRange(new byte[] { 0, 0, (byte)Game.Opcodes.joingame });
+
+			// update the database
 			SqlCommand cmd;
-			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
 			{
 				connection.Open();
-                string sql = "UPDATE [dbo].[ActiveGames] SET player2 = @playerID, player2LastMove = GetUTCDate() WHERE Id = @gameID";
+                string sql = "UPDATE [dbo].[ActiveGames] SET player2 = @playerID, history = @history, player2LastMove = GetUTCDate() WHERE Id = @gameID";
 				cmd = new SqlCommand(sql, connection);
-				cmd.Parameters.AddWithValue("@playerID", playerID);
+				cmd.Parameters.AddWithValue("@playerID", username);
 				cmd.Parameters.AddWithValue("@gameID", gameID);
+				cmd.Parameters.AddWithValue("@history", game.history.ToArray());
 				// cmd.Parameters.AddWithValue("@datetime", System.DateTime.Now); // .ToString(dateTimeString));
 				cmd.ExecuteNonQuery();
 			}
 
             // update in-memory game object
-            Game game = ActivateGame(gameID);
-            game.player2 = playerID;
+            game.player2 = username;
 
             // notify player1 that their challenge was accepted
             UserController.ActivatePlayer(game.player1).Message = "accepted: " + game.player2;
-			return "joined";
+			return Json( new { message = "joined" } );
 		}
 
 		// POST: api/games/leave/{gameID}
@@ -457,7 +495,7 @@ namespace GoGoBackend.Controllers
 			//}
 
 			//SqlCommand cmd;
-			//using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			//using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
 			//{
 			//	connection.Open();
 			//	// leave the game - if this is player2 and no moves have been played yet

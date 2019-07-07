@@ -35,11 +35,15 @@ namespace GoGoBackend.Go
 			lake = 3,
 			illegal = 9,
 			gameover = 10,
+			joingame = 11,
 			ping = 15
 		}
 
 		public string Id = "";
 		public string player1, player2, currentPlayer;
+		public string player1LastMove;
+		public string player2LastMove;
+
 		public List<byte> history;
 		public int gameMode;
 		public int boardSize;
@@ -74,18 +78,20 @@ namespace GoGoBackend.Go
 			Initialize(user1, user2, boardSize, gameMode, key, new List<byte>());
 		}
 
-		public Game(string user1, string user2, int boardSize, int gameMode, string key, List<byte> history)
+		public Game(string user1, string user2, int boardSize, int gameMode, string key, List<byte> history, string player1LastMove = "", string player2LastMove = "")
 		{
-			Initialize(user1, user2, boardSize, gameMode, key, history);
+			Initialize(user1, user2, boardSize, gameMode, key, history, player1LastMove, player2LastMove);
 		}
 
 		// take arguments from either of the two constructor options
-		private void Initialize(string player1, string player2, int boardSize, int gameMode, string gameID, List<byte> history)
+		private void Initialize(string player1, string player2, int boardSize, int gameMode, string gameID, List<byte> history, string player1LastMove = "", string player2LastMove = "")
 		{
 			this.Id = gameID;
 			this.history = history;
 			this.player1 = player1;
 			this.player2 = player2;
+			this.player1LastMove = player1LastMove;
+			this.player2LastMove = player2LastMove;
             currentPlayer = player2;
 			this.boardSize = boardSize;
 			this.gameMode = gameMode;
@@ -403,7 +409,9 @@ namespace GoGoBackend.Go
 				int x = history[i];
 				int y = history[i + 1];
 				int opCode = history[i + 2];
-				if (opCode == 0)
+
+				if (opCode == (int)Opcodes.joingame) { /* the opcode that does nothing. */ }
+				else if (opCode == 0)
 				{
 					// pass
 					PassTurn();

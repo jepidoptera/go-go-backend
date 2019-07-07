@@ -26,7 +26,7 @@ namespace GoGoBackend.Go
         private List<string> messages = new List<string>();
         public string Message
         {
-            get { string returnval = null; if (messages.Count > 0) { returnval = messages[0]; messages.RemoveAt(0); } return returnval; }
+            get { string returnval = ""; if (messages.Count > 0) { returnval = messages[0]; messages.RemoveAt(0); } return returnval; }
             set { messages.Add(value); }
         }
 

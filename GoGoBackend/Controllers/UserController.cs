@@ -2,24 +2,20 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Belgrade.SqlClient;
 using System.Data.SqlClient;
-using System.IO;
 using System.Security.Cryptography;
 using StringManipulation;
 using GoGoBackend.Go;
-using System.Threading;
 using GoToken;
-using System.Data.SqlTypes;
 using Newtonsoft.Json;
 
 namespace GoGoBackend.Controllers
 {
     [Produces("application/json")]
     [Route("api/user")]
-    public class UserController : Controller
+	public class UserController : Controller
     {
 		private readonly IQueryPipe SqlPipe;
 		private readonly ICommand SqlCommand;
@@ -47,7 +43,7 @@ namespace GoGoBackend.Controllers
         {
             List<string> results = new List<string>();
             string sql = "select username from[dbo].[Users]";
-            using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+            using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
             using (SqlCommand cmd = new SqlCommand(sql, connection))
             {
                 connection.Open();
@@ -111,7 +107,7 @@ namespace GoGoBackend.Controllers
 			else
 			{
 				// check if username is already taken
-				using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+				using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
 				{
 					connection.Open();
 					cmd = new SqlCommand("Select Validated from [dbo].[Users] where username=@username", connection);
@@ -171,7 +167,7 @@ namespace GoGoBackend.Controllers
 			}
 
 			// insert new username entry into the database
-			using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+			using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
 			{
 				connection.Open();
 				string sql = "INSERT INTO [dbo].[Users] (Username,PasswordHash,Email,ethAddress,Validation_String)" +
@@ -191,29 +187,33 @@ namespace GoGoBackend.Controllers
 			return "registered.  please check your email for a confirmation link, then press \"back\" to log in.";
 		}
 
-        // POST: api/user/username
+        // POST: api/user/login
         // this is a login attempt
-        [HttpPost("login/{username}")]
-        public string Login(string username)
+        [HttpPost("login")]
+        public JsonResult Login()
         {
-            string password = Request.Form["password"];
+			// Response.Headers.Add(new KeyValuePair<string, Microsoft.Extensions.Primitives.StringValues>("Access-Control-Allow-Origin", "*"));
+
+			string password = Request.Form["password"];
+			string username = Request.Form["username"];
             // passed all the checks, you can log in now
-            if (!ValidatePassword(username, password, out string message))
+            if (!ValidatePassword(username, password, out string error))
             {
-                return message;
+				// validation failed, return error message
+                return Json(new { error });
             }
             else
             {
                 // return an auth token
-                byte[] authToken;
+                byte[] authtoken;
                 using (MD5 md5Hash = MD5.Create())
                 {
                     // get a random auth token
-                    authToken = md5Hash.ComputeHash((password + rand.NextDouble().ToString()).Select(c => (byte)c).ToArray()); 
-                    //authCodeHash = md5Hash.ComputeHash(authToken);
+                    authtoken = md5Hash.ComputeHash((password + rand.NextDouble().ToString()).Select(c => (byte)c).ToArray()); 
+                    //authCodeHash = md5Hash.ComputeHash(authtoken);
                 }
                 // update database with token hash
-                UpdatePlayer(username, authToken: authToken);
+                UpdatePlayer(username, authtoken: authtoken);
                 //SqlCommand cmd = new SqlCommand(
                 //  @"update [dbo].[Users] set authCodeHash = @authCodeHash where username = @username");
                 //cmd.Parameters.AddWithValue("@username", username);
@@ -222,11 +222,28 @@ namespace GoGoBackend.Controllers
                 //SqlCommand.Sql(cmd).Exec();
 
                 // give preimage to user
-                return "success: " + authToken.ToHexString();
+                return Json(new {authtoken = authtoken.ToHexString()});
             }
         }
 
-        public bool ValidatePassword(string username, string password, out string message)
+		// request to see if this auth token is still good.
+		[HttpPost("authorize")]
+		public JsonResult Authorize()
+		{
+			string username = Request.Form["username"];
+			string authtoken = Request.Form["authtoken"];
+			if (username == null) username = "";
+			if (ValidateAuthToken(username, authtoken))
+			{
+				return Json(new { valid = true });
+			}
+			else
+			{
+				return Json(new { valid = false });
+			}
+		}
+
+		public bool ValidatePassword(string username, string password, out string error)
         {
             // hash the provided password
             byte[] passwordHash;
@@ -242,25 +259,25 @@ namespace GoGoBackend.Controllers
             // does this user exist?
             if (player == null)
             {
-                message = "user not found. register new?  ------>";
+                error = "user not found. register new?  ------>";
                 return false;
             }
             // have they confirmed via email?
             else if (!player.validated)
             {
-                message = "user registered but not confirmed.  please use the confirmation link that was emailed to you.";
+                error = "user registered but not confirmed.  please use the confirmation link that was emailed to you.";
                 return false;
             }
             // is the password valid??
             // supposedly this comparison method is quite slow, but I don't think I care
             else if (!player.passwordHash.SequenceEqual(passwordHash))
             {
-                message = "wrong password";
+                error = "wrong password";
                 return false;
             }
             else 
             {
-                message = "success";
+				error = "";
                 return true;
             }
         }
@@ -271,7 +288,6 @@ namespace GoGoBackend.Controllers
             Player player = ActivatePlayer(username);
             if (player == null)
                 return false;
-
             // does the hash match?
             using (MD5 md5Hash = MD5.Create())
 			{
@@ -357,7 +373,7 @@ namespace GoGoBackend.Controllers
         //{
         //    T[] returnVal = new T[fields.Length];
         //    string sql = string.Format("select {0} from [dbo].[Users] where username = @username", string.Join(", ", fields));
-        //    using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+        //    using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
         //    using (SqlCommand cmd = new SqlCommand(sql, connection))
         //    {
         //        connection.Open();
@@ -391,7 +407,7 @@ namespace GoGoBackend.Controllers
         // a general method to update player info in database and memory at the same time
         public static void UpdatePlayer(string username, string password = null, string emailAddress = null, 
         string emailNotifications = null, string ethAddress = null, 
-        int gamesPlayed = -1, int gamesWon = -1, byte[] authToken = null, 
+        int gamesPlayed = -1, int gamesWon = -1, byte[] authtoken = null, 
         string validated = null, string validationString = null)
         {
             Player player = ActivatePlayer(username);
@@ -436,10 +452,10 @@ namespace GoGoBackend.Controllers
                 args.Add(" gamesWon=@gamesWon");
                 player.gamesWon = gamesWon;
             }
-            if (authToken != null)
+            if (authtoken != null)
             {
                 args.Add(" authCodeHash=@authtokenHash");
-                authtokenHash = MD5.Create().ComputeHash(authToken);
+                authtokenHash = MD5.Create().ComputeHash(authtoken);
                 player.authCodeHash = authtokenHash;
             }
             if (validated != null)
@@ -459,7 +475,7 @@ namespace GoGoBackend.Controllers
             // put it all together
             sql += string.Join(',', args.ToArray()) + " where username=@username";
             // add parameters
-            using (SqlConnection connection = new SqlConnection(Startup.ConnString))
+            using (SqlConnection connection = new SqlConnection(SecretsController.ConnString))
             using (SqlCommand cmd = new SqlCommand(sql, connection))
             {
                 connection.Open();
@@ -485,14 +501,30 @@ namespace GoGoBackend.Controllers
 		}
 
         // GET: api/user/ping/{playerID}
-        [HttpGet("ping/{playerID}")]
-        public string Ping(string playerID)
+        [HttpPost("ping")]
+        public JsonResult Ping()
         {
-            Player player = ActivatePlayer(playerID);
+			string username = Request.Form["username"];
+			string authtoken = Request.Form["authtoken"];
+
+			// ping requires validation now. 
+			// otherwise someone could steal your messages.
+			if (!ValidateAuthToken(username, authtoken))
+			{
+				return Json(new { error = "bad auth token." });
+			}
+
+			Player player = ActivatePlayer(username);
             if (player == null) return null;
             player.Ping();
-            return player.Message;
-        }
+			if (player.Message != null)
+			{
+				// if this player has a message waiting, deliver it
+				return Json(new { message = player.Message });
+			}
+			// if there is no message, just return "ping"
+			else return Json(new { message = "ping" });
+		}
 
         public static Player ActivatePlayer(string playerID)
 		{
@@ -507,7 +539,7 @@ namespace GoGoBackend.Controllers
 
             // query database
             string sql = "Select * from [dbo].[Users] where username = @playerID for json auto, without_array_wrapper";
-            using (SqlConnection dbConnection = new SqlConnection(Startup.ConnString))
+            using (SqlConnection dbConnection = new SqlConnection(SecretsController.ConnString))
             using (SqlCommand dbCommand = new SqlCommand(sql, dbConnection))
             {
                 dbCommand.Parameters.AddWithValue("@playerID", playerID);
@@ -526,7 +558,7 @@ namespace GoGoBackend.Controllers
                 dbConnection.Close();
             }
             // add to player dictionary
-            Player.Add(returnPlayer);
+            if (returnPlayer != null) Player.Add(returnPlayer);
 
             return returnPlayer; // new Player(username, emailAddress, ethAddress, gamesPlayed, gamesWon);
             // success

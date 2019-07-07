@@ -31,40 +31,18 @@ namespace GoGoBackend.Controllers
 
 		public static string ConnString { get {
 			// return the string used to connect to the database
-			return "Server=tcp:gogobackend.database.windows.net,1433;Initial Catalog = user_registry; Persist Security Info=False;User ID = Jepidoptera; Password=" +
-			configuration.GetSection("secrets").GetSection("databasePassword").Value + "; MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout = 30;";
+			return configuration != null
+				? "Server=tcp:gogobackend.database.windows.net,1433;Initial Catalog = user_registry; Persist Security Info=False;User ID = Jepidoptera; Password=" +
+				configuration.GetSection("secrets").GetSection("databasePassword").Value + "; MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout = 30;"
+				: null;
 		} }
 
 		// GET api/values
 		[HttpGet]
         public IEnumerable<string> Get()
         {
-            return new string[] { "Spilling all secrets now!", configuration.GetSection("secrets").GetSection("databasePassword").Value };
+            return new string[] { "Get out of here, you're not supposed to be here!" };
         }
 
-        // GET api/values/5
-        [HttpGet("{id}")]
-        public string Get(int id)
-        {
-            return "value";
-        }
-
-        // POST api/values
-        [HttpPost]
-        public void Post([FromBody]string value)
-        {
-        }
-
-        // PUT api/values/5
-        [HttpPut("{id}")]
-        public void Put(int id, [FromBody]string value)
-        {
-        }
-
-        // DELETE api/values/5
-        [HttpDelete("{id}")]
-        public void Delete(int id)
-        {
-        }
     }
 }
