@@ -67,9 +67,9 @@ namespace GoGoBackend.Controllers
                     Game tGame = ActivateGame(reader.GetString(0));
                     // is this player online?
                     // check the other player, the one who is not submitting this query
-                    tGame.online = (playerID.Equals(tGame.player1, StringComparison.OrdinalIgnoreCase))
-                        ? UserController.ActivatePlayer(tGame.player2).IsOnline()
-                        : UserController.ActivatePlayer(tGame.player1).IsOnline(); 
+                    tGame.online = (playerID.Equals(tGame.white, StringComparison.OrdinalIgnoreCase))
+                        ? UserController.ActivatePlayer(tGame.black).IsOnline()
+                        : UserController.ActivatePlayer(tGame.white).IsOnline(); 
                     resultGames.Add(tGame);
                 }
                 // return json string listing relevant games.
@@ -182,14 +182,19 @@ namespace GoGoBackend.Controllers
 			int opCode = Convert.ToInt32(Request.Form["opcode"]);
 			Go.Game game;
 
-			// todo: figure out whether or not it's this player's turn
-			// if it's not, we should not respond the same way
-			// also todo: figure out if this is an actual active player and not just some rando from the internet
-			if (!UserController.ValidateAuthToken(currentPlayer.username, token))
+			// validate input data
+			// does this user exist?
+			if (currentPlayer == null)
+			{
+				return Json(new { error = "player " + Request.Form["username"] + " not found." });
+			}
+			// is their auth token valid?
+			else if (!UserController.ValidateAuthToken(currentPlayer.username, token))
 			{
 				return Json(new { error = "auth token invalid" } );
 			}
 
+			// does this game exist?
             game = ActivateGame(gameID);
             if (game == null)
             {
@@ -203,7 +208,7 @@ namespace GoGoBackend.Controllers
 				return Json(new { move = string.Format("0,0,{0}", Game.Opcodes.gameover) });
             }
 
-            // make sure this player is the one who's turn it is
+            // make sure this player is the one whose turn it is
             if (game.currentPlayer != currentPlayer.username && opCode < (int)Game.Opcodes.ping) 
 			{
 				return Json(new { error = "it's not your turn." });
@@ -229,19 +234,19 @@ namespace GoGoBackend.Controllers
 				}
 
 				// if players are signed up for email notifications, send those out
-				otherPlayer = (game.player1 == currentPlayer.username)
-					? UserController.ActivatePlayer(game.player2)
-					: UserController.ActivatePlayer(game.player1);
+				otherPlayer = (game.white == currentPlayer.username)
+					? UserController.ActivatePlayer(game.black)
+					: UserController.ActivatePlayer(game.white);
 
 				string message;
-				if (opCode == 0)
+				if (opCode == (int)Game.Opcodes.pass)
 				{
 					message = string.Format("{0} passed their move.  It is now {1}'s turn.", currentPlayer, otherPlayer);
 				}
 				else if (opCode == (int)Game.Opcodes.gameover)
 				{
 					message = string.Format("The game is now over.  Final score: \n {0}: {1} \n {2}: {3}",
-						game.player1, game.blackScore, game.player2, game.whiteScore);
+						game.white, game.blackScore, game.black, game.whiteScore);
 				}
 				else if (opCode == (int)Game.Opcodes.illegal)
 				{
@@ -270,8 +275,8 @@ namespace GoGoBackend.Controllers
                 // figure out how many go to each player
                 Player[] players =
                 {
-                    UserController.ActivatePlayer(game.player1),
-                    UserController.ActivatePlayer(game.player2)
+                    UserController.ActivatePlayer(game.white),
+                    UserController.ActivatePlayer(game.black)
                 };
                 // distribute one coin for each move that was played
                 int totalReward = game.history.Count / 3;
@@ -460,15 +465,15 @@ namespace GoGoBackend.Controllers
 				// joining a non-existent game
 				return Json(new { error = "game does not exist." });
 			}
-			if (game.player1 == username || game.player2 == username)
+			if (game.white == username || game.black == username)
 			{
 				// this player was already in this game
 				return Json(new { message = "rejoined game " + game.Id });
 			}
-			else if (game.player2 != "")
+			else if (game.black != "")
 			{
 				// joining a game that already belongs to someone else
-				return Json(new { error = String.Format("game is already in progress. {0} vs {1}", game.player1, game.player2 )});
+				return Json(new { error = String.Format("game is already in progress. {0} vs {1}", game.white, game.black )});
 			}
 
 			// joining an open game for the first time as player2
@@ -478,7 +483,7 @@ namespace GoGoBackend.Controllers
 				game.history.AddRange(new byte[] { 0, 0, (byte)Game.Opcodes.joingame });
 
 				// add this player as player 2
-				game.player2 = username;
+				game.black = username;
 
 				// update the database
 				SqlCommand cmd;
@@ -487,7 +492,7 @@ namespace GoGoBackend.Controllers
 					connection.Open();
 					string sql = "UPDATE [dbo].[ActiveGames] SET player2 = @player2, history = @history, player2LastMove = GetUTCDate() WHERE Id = @gameID";
 					cmd = new SqlCommand(sql, connection);
-					cmd.Parameters.AddWithValue("@player2", game.player2);
+					cmd.Parameters.AddWithValue("@player2", game.black);
 					cmd.Parameters.AddWithValue("@gameID", gameID);
 					cmd.Parameters.AddWithValue("@history", game.history.ToArray());
 					// cmd.Parameters.AddWithValue("@datetime", System.DateTime.Now); // .ToString(dateTimeString));
@@ -495,7 +500,7 @@ namespace GoGoBackend.Controllers
 				}
 
 				// notify player1 that their challenge was accepted
-				UserController.ActivatePlayer(game.player1).Message = game.player2 + " joined " + game.Id;
+				UserController.ActivatePlayer(game.white).Message = game.black + " joined " + game.Id;
 				return Json(new { message = "joined" });
 
 			}
@@ -582,8 +587,8 @@ namespace GoGoBackend.Controllers
                 {
                     // game hasn't started yet, ok to delete
                     // check auth token
-                    if (!UserController.ValidateAuthToken(game.player1, token) &&
-                       !UserController.ValidateAuthToken(game.player2, token)) return Json(new { error = "auth token invalid" });
+                    if (!UserController.ValidateAuthToken(game.white, token) &&
+                       !UserController.ValidateAuthToken(game.black, token)) return Json(new { error = "auth token invalid" });
 
                 }
                 else return Json(new { error = "game already in progress" });
@@ -595,9 +600,9 @@ namespace GoGoBackend.Controllers
 			SqlCommand.Sql(cmd).Exec();
 
             // notify other player that their challenge was denied
-            Player player1 = UserController.ActivatePlayer(game.player1);
+            Player player1 = UserController.ActivatePlayer(game.white);
             if (player1.emailNotifications)
-                Emails.Server.SendNotificationEmail(player1.email, string.Format("{0} denied your challenge request.", game.player2));
+                Emails.Server.SendNotificationEmail(player1.email, string.Format("{0} denied your challenge request.", game.black));
 
             // remove from games dictionary
             activeGames.Remove(gameID);

@@ -29,9 +29,9 @@ namespace GoGoBackend.Go
 
 		public enum Opcodes
 		{
-			pass = 0,
-			black = 1,
-			white = 2,
+			black = 0,
+			white = 1,
+			pass = 2,
 			lake = 3,
 			illegal = 9,
 			gameover = 10,
@@ -40,7 +40,7 @@ namespace GoGoBackend.Go
 		}
 
 		public string Id = "";
-		public string player1, player2, currentPlayer;
+		public string white, black, currentPlayer;
 		public string player1LastMove;
 		public string player2LastMove;
 
@@ -56,8 +56,8 @@ namespace GoGoBackend.Go
 		public bool online = false;
 		public string description;
 
-		private const int stone_black = 1;
-		private const int stone_white = 2;
+		private const int stone_black = 0;
+		private const int stone_white = 1;
 
 		private int passTurns;
 		private int turn;
@@ -88,15 +88,15 @@ namespace GoGoBackend.Go
 		{
 			this.Id = gameID;
 			this.history = history;
-			this.player1 = player1;
-			this.player2 = player2;
+			this.white = player1;
+			this.black = player2;
 			this.player1LastMove = player1LastMove;
 			this.player2LastMove = player2LastMove;
             currentPlayer = player2;
 			this.boardSize = boardSize;
 			this.gameMode = gameMode;
 			this.gameState = BuildNodeGraph(gameMode, boardSize);
-			this.turn = 1;
+			this.turn = (int)Opcodes.black;
 			if (history.Count > 0) PlayThrough(history, boardSize, gameMode);
 			activeGames[gameID] = this;
 			if (gameMode == 0) description = string.Format("standard square {0}x{0}", boardSize);
@@ -138,7 +138,7 @@ namespace GoGoBackend.Go
 					// illegal move, lose one turn
 					this.opcode = Opcodes.illegal;
                     mre.Set();
-                    return false;
+                    return true;
 				}
 				// trigger the previous instance of MakeMove to return the value of this (current) move
 				if (!gameover) mre.Set();
@@ -236,7 +236,7 @@ namespace GoGoBackend.Go
 		{
 			// switch turns
 			turn = (turn == stone_white) ? stone_black : stone_white;
-            currentPlayer = (turn == stone_black) ? player2 : player1;
+            currentPlayer = (turn == stone_black) ? black : white;
 		}
 
 		// create a list of points which contain stones which would be captured if current player moves at [location]
