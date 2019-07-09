@@ -470,7 +470,7 @@ namespace GoGoBackend.Controllers
 				// this player was already in this game
 				return Json(new { message = "rejoined game " + game.Id });
 			}
-			else if (game.black != "")
+			else if (game.black != "" && game.black != username)
 			{
 				// joining a game that already belongs to someone else
 				return Json(new { error = String.Format("game is already in progress. {0} vs {1}", game.white, game.black )});
