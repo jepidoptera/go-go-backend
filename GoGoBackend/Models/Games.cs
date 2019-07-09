@@ -58,6 +58,7 @@ namespace GoGoBackend.Go
 
 		private const int stone_black = 0;
 		private const int stone_white = 1;
+        private const int stone_null = -1;
 
 		private int passTurns;
 		private int turn;
@@ -173,7 +174,7 @@ namespace GoGoBackend.Go
 			if (color != turn) return false;
 
 			// only play on a square that isn't occupied
-			if (gameState[location].stone >= 0) return false;
+			if (gameState[location].stone > stone_null) return false;
 
 			// fill that grid point with a placeholder stone
 			gameState[location].stone = turn;
@@ -214,7 +215,7 @@ namespace GoGoBackend.Go
 				// -1 point for the player whose stone was captured
 				if (gameState[stone].stone == stone_black) blackScore -= 1;
 				if (gameState[stone].stone == stone_white) whiteScore -= 1;
-				gameState[stone].stone = 0;
+				gameState[stone].stone = -1;
 			}
 		}
 
@@ -247,7 +248,7 @@ namespace GoGoBackend.Go
 			for (int i = 0; i < gameState[location].neighbors.Count; i++)
 			{
 				int n = gameState[location].neighbors[i].index;
-				if (gameState[n].stone != 0 && gameState[n].stone != gameState[location].stone &&
+				if (gameState[n].stone > stone_null && gameState[n].stone != gameState[location].stone &&
 					!captiveGroup.Contains(n))
 				{
 					GroupAlike(start: n, group: out List<int> enemyGroup, neighbors: out List<int> enemyNeighbors);
@@ -255,7 +256,7 @@ namespace GoGoBackend.Go
 					breathingRoom = false;
 					foreach (int e in enemyNeighbors)
 					{
-						if (gameState[e].stone == 0)
+						if (gameState[e].stone == stone_null)
 						{
 							breathingRoom = true;
 							break;
@@ -323,16 +324,16 @@ namespace GoGoBackend.Go
 			// find the score between two players on the given board
 			dead_stones = new List<int>();
 			bool[] scored = new bool[gameState.Length];
-			List<int>[] territory = new List<int>[3] { new List<int>(), new List<int>(), new List<int>() };
+			List<int>[] territory = { new List<int>(), new List<int>(), new List<int>() };
 			List<int> nullTerritory = territory[0];
 			List<int> blackTerritory = territory[1];
 			List<int> whiteTerritory = territory[2];
 			for (int i = 0; i < gameState.Length; i++)
 			{
-				if (gameState[i].owner == 0)
+				if (gameState[i].owner == stone_null)
 				{
 					// this may be an uncounted region of territory
-					if (gameState[i].stone == 0)
+					if (gameState[i].stone == stone_null)
 					{
 						// empty, uncounted space
 						int blackBorders = 0, whiteBorders = 0;
@@ -358,7 +359,7 @@ namespace GoGoBackend.Go
 			// capture stones which find themselves surrounded by enemy territory
 			for (int i = 0; i < gameState.Length; i++)
 			{
-				if (gameState[i].owner == 0)
+				if (gameState[i].owner == stone_null)
 				{
 					// a group of stones which hasn't been processed yet
 					bool safe = false;
@@ -411,7 +412,7 @@ namespace GoGoBackend.Go
 				int opCode = history[i + 2];
 
 				if (opCode == (int)Opcodes.joingame) { /* the opcode that does nothing. */ }
-				else if (opCode == 0)
+				else if (opCode == (int)Opcodes.pass)
 				{
 					// pass
 					PassTurn();
@@ -568,7 +569,7 @@ namespace GoGoBackend.Go
 
 		public int[] GameState()
 		{
-
+            // return a list containing the current value of each node
 			int[] returnval = new int[gameState.Length];
 			for (int i = 0; i < gameState.Length; i++)
 			{

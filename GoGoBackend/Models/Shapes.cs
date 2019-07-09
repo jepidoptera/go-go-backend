@@ -13,7 +13,7 @@ namespace Shapes
 
 		public int index; // each mapvertex has a unique index within the whole world
 		
-		public int owner; // won't be used until end-of-game scoring
+		public int owner = -1; // won't be used until end-of-game scoring
 
 		public int stone = -1;
 
