@@ -173,7 +173,7 @@ namespace GoGoBackend.Go
 			if (color != turn) return false;
 
 			// only play on a square that isn't occupied
-			if (gameState[location].stone < 0) return false;
+			if (gameState[location].stone >= 0) return false;
 
 			// fill that grid point with a placeholder stone
 			gameState[location].stone = turn;
