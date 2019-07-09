@@ -465,7 +465,7 @@ namespace GoGoBackend.Controllers
 				// joining a non-existent game
 				return Json(new { error = "game does not exist." });
 			}
-			if (game.white == username || game.black == username)
+			else if (game.white == username)
 			{
 				// this player was already in this game
 				return Json(new { message = "rejoined game " + game.Id });
@@ -484,6 +484,9 @@ namespace GoGoBackend.Controllers
 
 				// add this player as player 2
 				game.black = username;
+
+                // black goes first
+                game.currentPlayer = game.black;
 
 				// update the database
 				SqlCommand cmd;
@@ -504,8 +507,13 @@ namespace GoGoBackend.Controllers
 				return Json(new { message = "joined" });
 
 			}
-			else
-			{
+            else if (game.black == username)
+            {
+                // this player was already in this game, and it already started
+                return Json(new { message = "rejoined game " + game.Id });
+            }
+            else
+            {
 				// this should literally never happen.
 				return Json(new { error = "sanity check failed." });
 			}
