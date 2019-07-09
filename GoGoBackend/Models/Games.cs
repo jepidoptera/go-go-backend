@@ -14,7 +14,7 @@ namespace GoGoBackend.Go
 		{
 			public int x;
 			public int y;
-			public Point(int x, int y)
+            public Point(int x, int y)
 			{
 				this.x = x;
 				this.y = y;
@@ -173,7 +173,7 @@ namespace GoGoBackend.Go
 			if (color != turn) return false;
 
 			// only play on a square that isn't occupied
-			if (gameState[location].stone != 0) return false;
+			if (gameState[location].stone < 0) return false;
 
 			// fill that grid point with a placeholder stone
 			gameState[location].stone = turn;

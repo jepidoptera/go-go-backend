@@ -528,6 +528,9 @@ namespace GoGoBackend.Controllers
 
         public static Player ActivatePlayer(string playerID)
 		{
+            // did they even give us a username?
+            if (playerID == null) return null;
+
             // let's not be case-sensitive
             playerID = playerID.ToLower();
 

@@ -367,6 +367,9 @@ namespace GoGoBackend.Controllers
 				dbConnection.Close();
 			}
 
+            // this would indicate the game was not found in the database
+            if (player1 == "") return null;
+
 			// model it as an object with manual reset events and gamestate
 			return new Game(player1, player2, boardSize, gameMode, gameID, history);
 			// success
