@@ -15,7 +15,7 @@ namespace Shapes
 		
 		public int owner; // won't be used until end-of-game scoring
 
-		public int stone;
+		public int stone = -1;
 
 		public Node(int index)
 		{
