@@ -26,7 +26,7 @@ namespace GoGoBackend.Controllers
 		{
 			// get the requested value out of the environment variable where it's stored
 			// this is much better than my previous approach of storing them in a plaintext dictionary
-			return configuration.GetSection("Secret").GetSection(key).Value;
+			return configuration.GetSection("secrets").GetSection(key).Value;
 		}
 
 		public static string ConnString { get {

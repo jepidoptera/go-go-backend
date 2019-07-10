@@ -3,6 +3,7 @@ using SendGrid;
 using SendGrid.Helpers.Mail;
 using SecretKeys;
 using GoGoBackend.Controllers;
+using System;
 
 namespace Emails
 {
@@ -18,7 +19,7 @@ namespace Emails
 		{
 			// var msg = new SendGridMessage();
 
-			var from = new EmailAddress("noreply@omisego.com", "User Confirm");
+			var from = new EmailAddress("noreply@jsgo.com", "User Confirm");
 			var subject = "New Account Confirmation";
 			var to = new EmailAddress(recipient, "New User");
 			var plainTextContent = "Please click the following link to confirm your account.";
@@ -28,7 +29,7 @@ namespace Emails
 			var client = new SendGridClient(apiKey);
 			// send the damn email.
 			var response = await client.SendEmailAsync(msg);
-
+            Console.WriteLine("sending validation email...  " + response.StatusCode);
 			return;
 
 		}

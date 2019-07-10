@@ -70,39 +70,45 @@ namespace GoGoBackend.Controllers
 		// POST: api/user/new
 		// initializing a new user
         [HttpPost("new")]
-		public async Task<string> NewUser()
+		public async Task<JsonResult> NewUser()
 		{
 			string password = Request.Form["password"];
-			string username = Request.Form["username"];
+            string confirmPassword = Request.Form["confirmPassword"];
+            string username = Request.Form["username"];
 			string email = Request.Form["email"];
 			string ethAddress = Request.Form["ethAddress"];
+            if (ethAddress == null) ethAddress = "";
 
 			SqlCommand cmd;
 
             // make sure all parameters are valid
             if (!Emails.Server.VerifyEmailAddress(email))
             {
-                return "invalid email address";
+                return Json(new { error = "invalid email address" });
             }
             else if (username == "")
             {
-                return "invalid username";
+                return Json(new { error = "enter a username" });
             }
             else if (username.Contains(',') || username.Contains(' '))
             {
-                return "username may not contain spaces or commas";
+                return Json(new { error = "username may not contain spaces or commas" });
             }
-			else if (password == "")
+            else if (confirmPassword != password)
+            {
+                return Json(new { error = "passwords don't match." });
+            }
+            else if (password == "")
 			{
-				return "invalid password";
+                return Json(new { error = "invalid password" });
 			}
 			else if (password == "password")
 			{
-				return "come on, you can do better.";
+                return Json(new { error = "come on, you can do better. try a different password." });
 			}
 			else if (password.Length < 8)
 			{
-				return "please enter a password of at least 8 characters.";
+                return Json(new { error = "please enter a password of at least 8 characters." });
 			}
 			else
 			{
@@ -119,11 +125,11 @@ namespace GoGoBackend.Controllers
 						// username is registered. is it confirmed?
 						if ((bool)result)
 						{
-							// registered and confirmed, can't use it
-							return "username not available";
+                            // registered and confirmed, can't use it
+                            return Json(new { error = "username not available." });
 						}
 						// registered but not confirmed: overwrite
-						else eraseRecord = true;
+						eraseRecord = true;
 					}
 
 					// similarly, check if email is used already
@@ -136,10 +142,10 @@ namespace GoGoBackend.Controllers
 						if ((bool)result)
 						{
 							// can't use it
-							return "an account is already registered under that email.";
-						}
-						// registered, not confirmed. overwrite
-						else eraseRecord = true;
+                            return Json(new { error = "an account is already registered under that email." });
+                        }
+                        // registered, not confirmed. overwrite
+                        else eraseRecord = true;
 					}
 
 					if (eraseRecord)
@@ -184,8 +190,8 @@ namespace GoGoBackend.Controllers
 			// validation email
 			await Emails.Server.SendValidationMail(email, String.Format("{0}/api/user/validate/{1}/{2}", Startup.apiServer, username, validationString));
 
-			return "registered.  please check your email for a confirmation link, then press \"back\" to log in.";
-		}
+            return Json(new { result = "success", message = "registered.  please check your email for a confirmation link.  this may take a few minutes..." });
+        }
 
         // POST: api/user/login
         // this is a login attempt
@@ -313,14 +319,17 @@ namespace GoGoBackend.Controllers
 		// user clicked link from validation email
 		public string ValidateUserLink(string username, string validID)
 		{
-            string validation_string = ActivatePlayer(username).validationString; // UserInfo<String>(username, "validation_string");
+            Player player = ActivatePlayer(username);
 
-			if (validation_string == null)
+			if (player == null)
 			{
 				// failed
 				return "invalid user";
 			}
-			else if (validation_string != validID)
+
+            string validation_string = player.validation_String; // UserInfo<String>(username, "validation_string");
+
+            if (validation_string != validID)
 			{
 				// failed for another reason
 				return "invalid code";
@@ -330,7 +339,7 @@ namespace GoGoBackend.Controllers
 
             UpdatePlayer(username, validated: "'true'", validationString: "");
 
-			return "Successfully registered.  You may now log in.";
+			return "Successfully registered.  You may now log in: <a href=\"https://ethereum-go.herokuapp.com\">login page</a>";
 		}
 
         [HttpPost("options/{username}")]
@@ -469,7 +478,7 @@ namespace GoGoBackend.Controllers
             if (validationString != null)
             {
                 args.Add(" validation_String=@validationString");
-                player.validationString = validationString;
+                player.validation_String = validationString;
             }
 
             // put it all together

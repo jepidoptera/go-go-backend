@@ -17,7 +17,7 @@ namespace GoGoBackend.Go
         public int stones;
         public float rank;
         public bool validated;
-        public string validationString;
+        public string validation_String;
         public byte[] passwordHash;
         public string email;
         public bool emailNotifications;

@@ -132,8 +132,6 @@ namespace GoGoBackend.Controllers
 				Player Player2 = UserController.ActivatePlayer(player2);
 				if (Player2 != null)
 				{
-					// notify them of the challenge
-					Player2.Message = "challenge: " + player1;
 					// may as well get the capitalization right
 					player2 = Player2.username;
 				}
@@ -164,9 +162,11 @@ namespace GoGoBackend.Controllers
 			}
 
 			// create a new active game
-			new Game(player1, player2, boardSize, mode, gameID);
+			Game game = new Game(player1, player2, boardSize, mode, gameID);
 
-			return Json(new { gameID });
+            UserController.ActivatePlayer(player2).Message = player1 + " challenged you to: " + game.description + ".";
+
+            return Json(new { gameID });
 		}
 
         [HttpPost("chat/{gameID}")]
