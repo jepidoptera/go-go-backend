@@ -55,6 +55,7 @@ namespace GoGoBackend.Go
 		public int blackScore = 0;
 		public bool online = false;
 		public string description;
+        public List<string> chatHistory = new List<string>();
 
 		private const int stone_black = 0;
 		private const int stone_white = 1;

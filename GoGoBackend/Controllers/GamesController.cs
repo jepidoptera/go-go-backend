@@ -169,8 +169,50 @@ namespace GoGoBackend.Controllers
 			return Json(new { gameID });
 		}
 
-		// POST: /api/Games/{ID}/Move
-		[HttpPost("move/{gameID}")]
+        [HttpPost("chat/{gameID}")]
+        public JsonResult SendChat(string gameID)
+        {
+            // unpack args
+            Player currentPlayer = UserController.ActivatePlayer(Request.Form["username"]);
+            string token = Request.Form["authtoken"];
+            string text = Request.Form["text"];
+            Go.Game game;
+
+            // validate input data
+            // does this user exist?
+            if (currentPlayer == null)
+            {
+                return Json(new { error = "player " + Request.Form["username"] + " not found." });
+            }
+            // is their auth token valid?
+            if (!UserController.ValidateAuthToken(currentPlayer.username, token))
+            {
+                return Json(new { error = "auth token invalid" });
+            }
+
+            // does this game exist?
+            game = ActivateGame(gameID);
+            if (game == null)
+            {
+                // doesn't exist
+                return Json(new { error = "this game does not exist." });
+            }
+
+            // is this player in this game?
+            if (game.black != currentPlayer.username && game.white != currentPlayer.username)
+            {
+                // no sending chats into someone else's game
+                return Json(new { error = "you are not a part of this game." });
+            }
+
+            // ok, everything appears good... send the text
+            // we'll just store it in the in-memory game object, not database
+            if (text != "") game.chatHistory.Add(currentPlayer.username + ": " + text);
+            return Json(new { status = "success", chat = text });
+        }
+
+        // POST: /api/Games/{ID}/Move
+        [HttpPost("move/{gameID}")]
 		public async Task<JsonResult> MakeMove(string gameID)
 		{
 			// unpack args
@@ -406,12 +448,10 @@ namespace GoGoBackend.Controllers
         [HttpGet("{gameID}")]
 		public JsonResult Get(string gameID)
 		{
-			// return info about this specific game
-			return Json(ActivateGame(gameID));
-
-			//var cmd = new SqlCommand("SELECT * FROM [dbo].[ActiveGames] WHERE Id = @gameID FOR JSON PATH, WITHOUT_ARRAY_WRAPPER");
-			//cmd.Parameters.AddWithValue("gameID", gameID);
-			//await SqlPipe.Sql(cmd).Stream(Response.Body, "{}");
+            // return info about this specific game
+            Game game = ActivateGame(gameID);
+            if (game == null) return Json(new { error = "game not found." });
+            return Json(game);
 		}
 
 		// return the node graph for this game as a json object
@@ -431,19 +471,18 @@ namespace GoGoBackend.Controllers
 
 		// return an array describing the state of each node
 		[HttpGet("state/{gameID}")]
-		public string GameState(string gameID)
+		public JsonResult GameState(string gameID)
 		{
             // activate this game if need be
             Game game = ActivateGame(gameID);
             if (game == null)
             {
-				return "none";
+				return Json(new { error = "game not found" });
 			}
             
 			// get state
 			int[] nodes = game.GameState();
-			string returnVal = string.Join(',', nodes);
-			return returnVal;
+			return Json(nodes);
 		}
 
 		// POST: api/games/join/{gameID}
